@@ -8,6 +8,7 @@ import (
 	"auth-service/models"
 	"auth-service/repository"
 	"auth-service/services"
+	"auth-service/config"
 )
 
 type CreateCredentialHandler struct {
@@ -16,7 +17,13 @@ type CreateCredentialHandler struct {
 
 func NewCreateCredentialHandler(db *sql.DB) *CreateCredentialHandler {
 	credentialRepo := repository.NewCredentialRepository(db)
-	credentialService := services.NewCredentialService(credentialRepo)
+	cfg := config.LoadConfig()
+	jwtService := services.NewJWTService(
+		cfg.JWTSecret,
+		cfg.JWTAccessExpirationMinutes,
+		cfg.JWTRefreshExpirationHours,
+	)
+	credentialService := services.NewCredentialService(credentialRepo, jwtService)
 
 	return &CreateCredentialHandler{
 		CredentialService: credentialService,

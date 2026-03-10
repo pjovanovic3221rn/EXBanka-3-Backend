@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"time"
 
 	"auth-service/models"
 )
@@ -152,4 +153,62 @@ func (r *CredentialRepository) GetByEmployeeID(employeeID int64) (*models.Creden
 	}
 
 	return &credential, nil
+}
+
+func (r *CredentialRepository) SetResetToken(id int64, resetToken string, expiresAt time.Time) error {
+	query := `
+	UPDATE credentials
+	SET reset_token = $1,
+	    reset_token_expires = $2,
+	    updated_at = NOW()
+	WHERE id = $3
+	`
+
+	_, err := r.DB.Exec(query, resetToken, expiresAt, id)
+	return err
+}
+
+func (r *CredentialRepository) GetByResetToken(token string) (*models.Credential, error) {
+	query := `
+	SELECT id, employee_id, email, password_hash, salt_password, is_active,
+	       activation_token, reset_token, reset_token_expires, created_at, updated_at
+	FROM credentials
+	WHERE reset_token = $1
+	`
+
+	var credential models.Credential
+
+	err := r.DB.QueryRow(query, token).Scan(
+		&credential.ID,
+		&credential.EmployeeID,
+		&credential.Email,
+		&credential.PasswordHash,
+		&credential.SaltPassword,
+		&credential.IsActive,
+		&credential.ActivationToken,
+		&credential.ResetToken,
+		&credential.ResetTokenExpires,
+		&credential.CreatedAt,
+		&credential.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &credential, nil
+}
+
+func (r *CredentialRepository) ResetPassword(id int64, passwordHash string, saltPassword string) error {
+	query := `
+	UPDATE credentials
+	SET password_hash = $1,
+	    salt_password = $2,
+	    reset_token = NULL,
+	    reset_token_expires = NULL,
+	    updated_at = NOW()
+	WHERE id = $3
+	`
+
+	_, err := r.DB.Exec(query, passwordHash, saltPassword, id)
+	return err
 }
