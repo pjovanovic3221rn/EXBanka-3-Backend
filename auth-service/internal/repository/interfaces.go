@@ -15,3 +15,7 @@ type TokenRepositoryInterface interface {
 	FindValid(tokenStr, tokenType string) (*models.Token, error)
 	InvalidateEmployeeTokens(employeeID uint, tokenType string) error
 }
+
+// Compile-time checks: ensure concrete repositories satisfy their interfaces.
+var _ EmployeeRepositoryInterface = (*EmployeeRepository)(nil)
+var _ TokenRepositoryInterface = (*TokenRepository)(nil)

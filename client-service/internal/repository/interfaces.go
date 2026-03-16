@@ -16,3 +16,6 @@ type ClientRepositoryInterface interface {
 type PermissionRepositoryInterface interface {
 	FindByNamesForSubject(names []string, subjectType string) ([]models.Permission, error)
 }
+
+var _ ClientRepositoryInterface = (*ClientRepository)(nil)
+var _ PermissionRepositoryInterface = (*PermissionRepository)(nil)

@@ -181,14 +181,10 @@ func TestCreateEmployee_Success(t *testing.T) {
 		createFn: func(token *models.Token) error { return nil },
 	}
 
-	svc := newTestEmployeeService(empRepo, &mockPermRepo{}, tokRepo)
-
-	// CreateEmployee calls notifSvc.SendActivationEmail at the end with _ = ...
-	// Since notifSvc is nil this will panic. We need a no-op notification service.
-	// Use the exported constructor with a dummy config — SMTP will fail but error is discarded.
+	// CreateEmployee calls notifSvc.SendActivationEmail; we construct a real NotificationService with an unreachable SMTP host — the dial error is discarded by the service with `_ =`.
 	cfgWithNotif := &config.Config{FrontendURL: "http://localhost:5173", SMTPHost: "localhost", SMTPPort: 1, SMTPFrom: "noreply@bank.com"}
 	notifSvc := service.NewNotificationService(cfgWithNotif)
-	svc = service.NewEmployeeServiceWithRepos(cfgWithNotif, empRepo, &mockPermRepo{}, tokRepo, notifSvc)
+	svc := service.NewEmployeeServiceWithRepos(cfgWithNotif, empRepo, &mockPermRepo{}, tokRepo, notifSvc)
 
 	emp, err := svc.CreateEmployee(validCreateInput())
 	if err != nil {

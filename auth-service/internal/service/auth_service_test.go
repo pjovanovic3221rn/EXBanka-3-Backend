@@ -76,6 +76,10 @@ var _ repository.TokenRepositoryInterface = (*mockTokenRepo)(nil)
 
 // ---- test helper ----
 
+// newTestAuthService creates an AuthService for unit testing.
+// notifSvc is nil — safe because unit tests only exercise paths that return
+// before the notification call (password mismatch, policy failure, etc.).
+// Tests that reach SendConfirmationEmail/SendResetPasswordEmail need a real notifSvc.
 func newTestAuthService(empRepo repository.EmployeeRepositoryInterface, tokRepo repository.TokenRepositoryInterface) *service.AuthService {
 	cfg := &config.Config{
 		JWTSecret:          "test-secret",
@@ -201,14 +205,8 @@ func TestLogin_InactiveEmployee(t *testing.T) {
 }
 
 func TestRefreshToken_WrongTokenType(t *testing.T) {
-	cfg := &config.Config{
-		JWTSecret:          "test-secret",
-		JWTAccessDuration:  15,
-		JWTRefreshDuration: 24 * 60,
-	}
-
 	// Generate an access token (type="access") and pass it to RefreshToken
-	accessToken, err := util.GenerateAccessToken(1, "emp@bank.com", "emp01", []string{}, cfg.JWTSecret, cfg.JWTAccessDuration)
+	accessToken, err := util.GenerateAccessToken(1, "emp@bank.com", "emp01", []string{}, "test-secret", 15)
 	if err != nil {
 		t.Fatalf("GenerateAccessToken() error: %v", err)
 	}

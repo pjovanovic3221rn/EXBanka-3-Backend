@@ -27,3 +27,7 @@ type TokenRepositoryInterface interface {
 	FindValid(tokenStr, tokenType string) (*models.Token, error)
 	InvalidateEmployeeTokens(employeeID uint, tokenType string) error
 }
+
+var _ EmployeeRepositoryInterface = (*EmployeeRepository)(nil)
+var _ PermissionRepositoryInterface = (*PermissionRepository)(nil)
+var _ TokenRepositoryInterface = (*TokenRepository)(nil)
