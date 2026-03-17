@@ -13,12 +13,19 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// requiredPermissions defines the permission an employee must have to call each RPC.
 var requiredPermissions = map[string]string{
 	"/client.v1.ClientService/CreateClient":            models.PermAdmin,
 	"/client.v1.ClientService/GetClient":               models.PermAdmin,
 	"/client.v1.ClientService/ListClients":             models.PermAdmin,
 	"/client.v1.ClientService/UpdateClient":            models.PermAdmin,
 	"/client.v1.ClientService/UpdateClientPermissions": models.PermAdmin,
+}
+
+// clientRequiredPermissions defines which RPCs a client JWT can call and what permission is needed.
+var clientRequiredPermissions = map[string]string{
+	"/client.v1.ClientService/GetClient":    models.PermClientBasic,
+	"/client.v1.ClientService/UpdateClient": models.PermClientBasic,
 }
 
 type claimsContextKey struct{}
@@ -57,11 +64,22 @@ func AuthInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 			return nil, status.Error(codes.Unauthenticated, "wrong token type: expected access token")
 		}
 
-		if requiredPerm, exists := requiredPermissions[info.FullMethod]; exists {
-			isAdmin := util.HasPermission(claims, models.PermAdmin)
-			hasPerm := util.HasPermission(claims, requiredPerm)
-			if !isAdmin && !hasPerm {
+		if claims.TokenSource == "client" {
+			requiredPerm, exists := clientRequiredPermissions[info.FullMethod]
+			if !exists {
+				return nil, status.Error(codes.PermissionDenied, "endpoint not accessible to clients")
+			}
+			if !util.HasPermission(claims, requiredPerm) {
 				return nil, status.Errorf(codes.PermissionDenied, "permission %q required", requiredPerm)
+			}
+		} else {
+			// employee (or legacy token without TokenSource)
+			if requiredPerm, exists := requiredPermissions[info.FullMethod]; exists {
+				isAdmin := util.HasPermission(claims, models.PermAdmin)
+				hasPerm := util.HasPermission(claims, requiredPerm)
+				if !isAdmin && !hasPerm {
+					return nil, status.Errorf(codes.PermissionDenied, "permission %q required", requiredPerm)
+				}
 			}
 		}
 

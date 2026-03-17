@@ -59,6 +59,11 @@ func AuthInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 			return nil, status.Error(codes.Unauthenticated, "wrong token type: expected access token")
 		}
 
+		// Client JWTs are not allowed on the employee service.
+		if claims.TokenSource == "client" {
+			return nil, status.Error(codes.PermissionDenied, "client tokens not allowed on employee service")
+		}
+
 		if requiredPerm, exists := requiredPermissions[info.FullMethod]; exists {
 			isAdmin := util.HasPermission(claims, models.PermAdmin)
 			hasPerm := util.HasPermission(claims, requiredPerm)
