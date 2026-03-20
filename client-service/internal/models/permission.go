@@ -1,10 +1,10 @@
 package models
 
 type Permission struct {
-	ID          uint     `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name        string   `gorm:"uniqueIndex;not null" json:"name"`
-	Description string   `json:"description"`
-	SubjectType string   `gorm:"not null;default:employee;index" json:"subject_type"`
+	ID          uint       `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name        string     `gorm:"uniqueIndex;not null" json:"name"`
+	Description string     `json:"description"`
+	SubjectType string     `gorm:"not null;default:employee;index" json:"subject_type"`
 	Clients     []Client `gorm:"many2many:client_permissions;" json:"-"`
 }
 
@@ -13,24 +13,52 @@ const (
 	PermissionSubjectClient   = "client"
 )
 
+// 4 employee roles (hierarchical: Admin > Supervisor > Agent > Basic)
 const (
-	PermAdmin               = "admin"
-	PermEmployeeCreate      = "employee.create"
-	PermEmployeeRead        = "employee.read"
-	PermEmployeeUpdate      = "employee.update"
-	PermEmployeeActivate    = "employee.activate"
-	PermEmployeePermissions = "employee.permissions"
-	PermClientBasic         = "client.basic"
-	PermClientTrading       = "client.trading"
+	PermEmployeeBasic      = "employeeBasic"
+	PermEmployeeAgent      = "employeeAgent"
+	PermEmployeeSupervisor = "employeeSupervisor"
+	PermEmployeeAdmin      = "employeeAdmin"
+)
+
+// 2 client roles
+const (
+	PermClientBasic   = "clientBasic"
+	PermClientTrading = "clientTrading"
 )
 
 var DefaultPermissions = []Permission{
-	{Name: PermAdmin, Description: "Full administrative access", SubjectType: PermissionSubjectEmployee},
-	{Name: PermEmployeeCreate, Description: "Can create new employees", SubjectType: PermissionSubjectEmployee},
-	{Name: PermEmployeeRead, Description: "Can read employee data", SubjectType: PermissionSubjectEmployee},
-	{Name: PermEmployeeUpdate, Description: "Can update employee data (non-admin targets only)", SubjectType: PermissionSubjectEmployee},
-	{Name: PermEmployeeActivate, Description: "Can activate/deactivate employees", SubjectType: PermissionSubjectEmployee},
-	{Name: PermEmployeePermissions, Description: "Can manage employee permissions", SubjectType: PermissionSubjectEmployee},
-	{Name: PermClientBasic, Description: "Basic client role", SubjectType: PermissionSubjectClient},
-	{Name: PermClientTrading, Description: "Trading-enabled client role", SubjectType: PermissionSubjectClient},
+	{Name: PermEmployeeBasic, Description: "Osnovno poslovanje banke, upravljanje klijentima", SubjectType: PermissionSubjectEmployee},
+	{Name: PermEmployeeAgent, Description: "Osnovno poslovanje banke, upravljanje klijentima, trgovina hartijama sa berze uz limite", SubjectType: PermissionSubjectEmployee},
+	{Name: PermEmployeeSupervisor, Description: "Osnovno poslovanje banke, upravljanje klijentima, trgovina hartijama sa berze bez limita, OTC, upravljanje fondovima i agentima", SubjectType: PermissionSubjectEmployee},
+	{Name: PermEmployeeAdmin, Description: "Osnovno poslovanje banke, upravljanje klijentima, trgovina hartijama sa berze bez limita, OTC, upravljanje fondovima i agentima, upravlja svim zaposlenima", SubjectType: PermissionSubjectEmployee},
+	{Name: PermClientBasic, Description: "Osnovno poslovanje banke", SubjectType: PermissionSubjectClient},
+	{Name: PermClientTrading, Description: "Trgovina hartijama sa berze, OTC, investiranje u fondove", SubjectType: PermissionSubjectClient},
+}
+
+// EmployeeRoleLevel returns the hierarchy level (higher = more access).
+func EmployeeRoleLevel(role string) int {
+	switch role {
+	case PermEmployeeAdmin:
+		return 4
+	case PermEmployeeSupervisor:
+		return 3
+	case PermEmployeeAgent:
+		return 2
+	case PermEmployeeBasic:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// HasEmployeeRole checks if the user's permissions include the required role or higher.
+func HasEmployeeRole(userPermissions []string, requiredRole string) bool {
+	requiredLevel := EmployeeRoleLevel(requiredRole)
+	for _, p := range userPermissions {
+		if EmployeeRoleLevel(p) >= requiredLevel {
+			return true
+		}
+	}
+	return false
 }

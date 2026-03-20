@@ -15,11 +15,11 @@ import (
 
 // requiredPermissions defines the permission an employee must have to call each RPC.
 var requiredPermissions = map[string]string{
-	"/client.v1.ClientService/CreateClient":            models.PermAdmin,
-	"/client.v1.ClientService/GetClient":               models.PermAdmin,
-	"/client.v1.ClientService/ListClients":             models.PermAdmin,
-	"/client.v1.ClientService/UpdateClient":            models.PermAdmin,
-	"/client.v1.ClientService/UpdateClientPermissions": models.PermAdmin,
+	"/client.v1.ClientService/CreateClient":            models.PermEmployeeBasic,
+	"/client.v1.ClientService/GetClient":               models.PermEmployeeBasic,
+	"/client.v1.ClientService/ListClients":             models.PermEmployeeBasic,
+	"/client.v1.ClientService/UpdateClient":            models.PermEmployeeBasic,
+	"/client.v1.ClientService/UpdateClientPermissions": models.PermEmployeeAdmin,
 }
 
 // clientRequiredPermissions defines which RPCs a client JWT can call and what permission is needed.
@@ -75,9 +75,7 @@ func AuthInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 		} else {
 			// employee (or legacy token without TokenSource)
 			if requiredPerm, exists := requiredPermissions[info.FullMethod]; exists {
-				isAdmin := util.HasPermission(claims, models.PermAdmin)
-				hasPerm := util.HasPermission(claims, requiredPerm)
-				if !isAdmin && !hasPerm {
+				if !util.HasPermission(claims, requiredPerm) {
 					return nil, status.Errorf(codes.PermissionDenied, "permission %q required", requiredPerm)
 				}
 			}

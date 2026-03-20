@@ -39,8 +39,12 @@ func main() {
 		slog.Error("Currency seed failed", "error", err)
 		os.Exit(1)
 	}
+	if err := database.SeedSifreDelatnosti(db); err != nil {
+		slog.Error("Sifre delatnosti seed failed", "error", err)
+		os.Exit(1)
+	}
 
-	accountH := handler.NewAccountHandler(db)
+	accountH := handler.NewAccountHandler(db, cfg)
 
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
@@ -76,8 +80,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	firmaH := handler.NewFirmaHandler(db)
+	createAccH := handler.NewCreateAccountHTTPHandler(db, cfg)
+
 	httpMux := http.NewServeMux()
 	httpMux.HandleFunc("/health", healthCheck)
+	httpMux.Handle("/api/v1/firme", middleware.CORS(http.HandlerFunc(firmaH.Create)))
+	httpMux.Handle("/api/v1/sifre-delatnosti", middleware.CORS(http.HandlerFunc(firmaH.ListSifreDelatnosti)))
+	httpMux.Handle("/api/v1/accounts/create", middleware.CORS(createAccH))
 	httpMux.Handle("/", middleware.CORS(gwMux))
 
 	httpServer := &http.Server{

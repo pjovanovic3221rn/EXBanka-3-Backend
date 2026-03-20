@@ -1,6 +1,11 @@
 package models
 
 const (
-	PermAdmin       = "admin"
-	PermClientBasic = "client.basic"
+	PermEmployeeBasic      = "employeeBasic"
+	PermEmployeeAgent      = "employeeAgent"
+	PermEmployeeSupervisor = "employeeSupervisor"
+	PermEmployeeAdmin      = "employeeAdmin"
+	PermClientBasic        = "clientBasic"
+	PermClientTrading      = "clientTrading"
 )
+

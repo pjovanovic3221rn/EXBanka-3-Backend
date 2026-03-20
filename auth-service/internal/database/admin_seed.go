@@ -20,13 +20,13 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 			return fmt.Errorf("failed to verify existing admin password: %w", err)
 		}
 
-		var allPerms []models.Permission
-		if err := db.Where("subject_type = ?", models.PermissionSubjectEmployee).Find(&allPerms).Error; err != nil {
-			return fmt.Errorf("failed to fetch permissions: %w", err)
+		var adminPerm models.Permission
+		if err := db.Where("name = ?", models.PermEmployeeAdmin).First(&adminPerm).Error; err != nil {
+			return fmt.Errorf("failed to fetch employeeAdmin permission: %w", err)
 		}
 
 		if ok && existing.Aktivan {
-			if err := db.Model(&existing).Association("Permissions").Replace(allPerms); err != nil {
+			if err := db.Model(&existing).Association("Permissions").Replace([]models.Permission{adminPerm}); err != nil {
 				return fmt.Errorf("failed to sync admin permissions: %w", err)
 			}
 			slog.Info("Admin already exists, skipping seed")
@@ -51,7 +51,7 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 		if err := db.Model(&existing).Updates(updates).Error; err != nil {
 			return fmt.Errorf("failed to repair existing admin: %w", err)
 		}
-		if err := db.Model(&existing).Association("Permissions").Replace(allPerms); err != nil {
+		if err := db.Model(&existing).Association("Permissions").Replace([]models.Permission{adminPerm}); err != nil {
 			return fmt.Errorf("failed to sync admin permissions: %w", err)
 		}
 
@@ -71,9 +71,9 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	var allPerms []models.Permission
-	if err := db.Where("subject_type = ?", models.PermissionSubjectEmployee).Find(&allPerms).Error; err != nil {
-		return fmt.Errorf("failed to fetch permissions: %w", err)
+	var adminPerm models.Permission
+	if err := db.Where("name = ?", models.PermEmployeeAdmin).First(&adminPerm).Error; err != nil {
+		return fmt.Errorf("failed to fetch employeeAdmin permission: %w", err)
 	}
 
 	admin := models.Employee{
@@ -90,7 +90,7 @@ func SeedDefaultAdmin(db *gorm.DB) error {
 		Pozicija:      "Administrator",
 		Departman:     "IT",
 		Aktivan:       true,
-		Permissions:   allPerms,
+		Permissions:   []models.Permission{adminPerm},
 	}
 
 	if err := db.Create(&admin).Error; err != nil {

@@ -29,7 +29,7 @@ type Employee struct {
 
 func (e *Employee) IsAdmin() bool {
 	for _, p := range e.Permissions {
-		if p.Name == PermAdmin {
+		if p.Name == PermEmployeeAdmin {
 			return true
 		}
 	}

@@ -2,6 +2,8 @@ package service
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
 	"time"
 
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/transfer-service/internal/models"
@@ -85,25 +87,49 @@ func (s *TransferService) CreateTransfer(input CreateTransferInput) (*models.Tra
 			input.Iznos, sender.DnevniLimit)
 	}
 
-	// Determine converted amount and exchange rate.
+	// Determine converted amount, exchange rate, and commission.
 	kurs := 1.0
 	konvertovaniIznos := input.Iznos
 	valutaIznosa := sender.Currency.Kod
+	provizijaProcent := 0.0
+	provizija := 0.0
 
 	if sender.CurrencyID != receiver.CurrencyID {
+		// Use selling rate (prodajni kurs): bank sells toCurrency to client.
 		kurs, err = s.exchangeSvc.GetRate(sender.Currency.Kod, receiver.Currency.Kod)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get exchange rate: %w", err)
 		}
-		konvertovaniIznos = input.Iznos * kurs
-	}
 
-	// Update sender balance.
-	if err := s.accountRepo.UpdateFields(sender.ID, map[string]interface{}{
-		"stanje":             sender.Stanje - input.Iznos,
-		"raspolozivo_stanje": sender.RaspolozivoStanje - input.Iznos,
-	}); err != nil {
-		return nil, fmt.Errorf("failed to update sender balance: %w", err)
+		// Commission 0-1% (random for now, in production this would be configurable)
+		provizijaProcent = math.Round(rand.Float64()*100) / 100 // 0.00 - 1.00%
+		provizija = math.Round(input.Iznos*provizijaProcent) / 100
+
+		// Sender pays: original amount + commission
+		ukupnoZaSkidanje := input.Iznos + provizija
+
+		if sender.RaspolozivoStanje < ukupnoZaSkidanje {
+			return nil, fmt.Errorf("insufficient balance: available %.2f, required %.2f (amount %.2f + commission %.2f)",
+				sender.RaspolozivoStanje, ukupnoZaSkidanje, input.Iznos, provizija)
+		}
+
+		konvertovaniIznos = math.Round(input.Iznos*kurs*100) / 100
+
+		// Update sender: deduct amount + commission
+		if err := s.accountRepo.UpdateFields(sender.ID, map[string]interface{}{
+			"stanje":             sender.Stanje - ukupnoZaSkidanje,
+			"raspolozivo_stanje": sender.RaspolozivoStanje - ukupnoZaSkidanje,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to update sender balance: %w", err)
+		}
+	} else {
+		// Same currency: no commission, no conversion
+		if err := s.accountRepo.UpdateFields(sender.ID, map[string]interface{}{
+			"stanje":             sender.Stanje - input.Iznos,
+			"raspolozivo_stanje": sender.RaspolozivoStanje - input.Iznos,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to update sender balance: %w", err)
+		}
 	}
 
 	// Update receiver balance.
@@ -121,6 +147,8 @@ func (s *TransferService) CreateTransfer(input CreateTransferInput) (*models.Tra
 		ValutaIznosa:      valutaIznosa,
 		KonvertovaniIznos: konvertovaniIznos,
 		Kurs:              kurs,
+		Provizija:         provizija,
+		ProvizijaProcent:  provizijaProcent,
 		Svrha:             input.Svrha,
 		Status:            "uspesno",
 		VremeTransakcije:  time.Now(),

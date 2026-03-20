@@ -80,19 +80,19 @@ func (r *TransferRepository) ListByClientID(clientID uint, filter models.Transfe
 
 func applyTransferFilters(query *gorm.DB, filter models.TransferFilter) *gorm.DB {
 	if filter.Status != "" {
-		query = query.Where("status = ?", filter.Status)
+		query = query.Where("transfers.status = ?", filter.Status)
 	}
 	if filter.DateFrom != nil {
-		query = query.Where("vreme_transakcije >= ?", filter.DateFrom)
+		query = query.Where("transfers.vreme_transakcije >= ?", filter.DateFrom)
 	}
 	if filter.DateTo != nil {
-		query = query.Where("vreme_transakcije <= ?", filter.DateTo)
+		query = query.Where("transfers.vreme_transakcije <= ?", filter.DateTo)
 	}
 	if filter.MinAmount != nil {
-		query = query.Where("iznos >= ?", *filter.MinAmount)
+		query = query.Where("transfers.iznos >= ?", *filter.MinAmount)
 	}
 	if filter.MaxAmount != nil {
-		query = query.Where("iznos <= ?", *filter.MaxAmount)
+		query = query.Where("transfers.iznos <= ?", *filter.MaxAmount)
 	}
 	return query
 }

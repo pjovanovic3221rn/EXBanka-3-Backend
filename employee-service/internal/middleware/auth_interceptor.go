@@ -14,13 +14,13 @@ import (
 )
 
 var requiredPermissions = map[string]string{
-	"/employee.v1.EmployeeService/CreateEmployee":            models.PermEmployeeCreate,
-	"/employee.v1.EmployeeService/ListEmployees":             models.PermEmployeeRead,
-	"/employee.v1.EmployeeService/GetEmployee":               models.PermEmployeeRead,
-	"/employee.v1.EmployeeService/UpdateEmployee":            models.PermEmployeeUpdate,
-	"/employee.v1.EmployeeService/SetEmployeeActive":         models.PermEmployeeActivate,
-	"/employee.v1.EmployeeService/UpdateEmployeePermissions": models.PermEmployeePermissions,
-	"/employee.v1.EmployeeService/GetAllPermissions":         models.PermEmployeeRead,
+	"/employee.v1.EmployeeService/CreateEmployee":            models.PermEmployeeAdmin,
+	"/employee.v1.EmployeeService/ListEmployees":             models.PermEmployeeAdmin,
+	"/employee.v1.EmployeeService/GetEmployee":               models.PermEmployeeAdmin,
+	"/employee.v1.EmployeeService/UpdateEmployee":            models.PermEmployeeAdmin,
+	"/employee.v1.EmployeeService/SetEmployeeActive":         models.PermEmployeeAdmin,
+	"/employee.v1.EmployeeService/UpdateEmployeePermissions": models.PermEmployeeAdmin,
+	"/employee.v1.EmployeeService/GetAllPermissions":         models.PermEmployeeAdmin,
 }
 
 type claimsContextKey struct{}
@@ -65,9 +65,7 @@ func AuthInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 		}
 
 		if requiredPerm, exists := requiredPermissions[info.FullMethod]; exists {
-			isAdmin := util.HasPermission(claims, models.PermAdmin)
-			hasPerm := util.HasPermission(claims, requiredPerm)
-			if !isAdmin && !hasPerm {
+			if !util.HasPermission(claims, requiredPerm) {
 				return nil, status.Errorf(codes.PermissionDenied, "permission %q required", requiredPerm)
 			}
 		}

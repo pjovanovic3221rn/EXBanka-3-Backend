@@ -15,9 +15,9 @@ import (
 
 // requiredPermissions maps employee-only RPCs to the required permission.
 var requiredPermissions = map[string]string{
-	"/account.v1.AccountService/CreateAccount":   models.PermAdmin,
-	"/account.v1.AccountService/ListAllAccounts": models.PermAdmin,
-	"/account.v1.AccountService/UpdateAccountLimits": models.PermAdmin,
+	"/account.v1.AccountService/CreateAccount":       models.PermEmployeeBasic,
+	"/account.v1.AccountService/ListAllAccounts":     models.PermEmployeeBasic,
+	"/account.v1.AccountService/UpdateAccountLimits": models.PermEmployeeBasic,
 }
 
 // clientRequiredPermissions maps RPCs accessible to clients.
@@ -73,9 +73,7 @@ func AuthInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 			}
 		} else {
 			if requiredPerm, exists := requiredPermissions[info.FullMethod]; exists {
-				isAdmin := util.HasPermission(claims, models.PermAdmin)
-				hasPerm := util.HasPermission(claims, requiredPerm)
-				if !isAdmin && !hasPerm {
+				if !util.HasPermission(claims, requiredPerm) {
 					return nil, status.Errorf(codes.PermissionDenied, "permission %q required", requiredPerm)
 				}
 			}

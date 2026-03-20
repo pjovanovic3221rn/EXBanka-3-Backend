@@ -3,21 +3,64 @@ package util
 import (
 	"fmt"
 	"math/rand"
-	"strconv"
 )
 
-const BankCode = "000"
+const (
+	BankCode   = "333"  // Naša banka - EXBanka-3
+	BranchCode = "0001" // Default filijala
+)
 
-// GenerateAccountNumber generates a random valid 18-digit account number.
-// Format: BBB (3-digit bank code) + CCCCCCCCCCCCCC (13-digit account) + KK (2-digit check digits).
-// Check digits satisfy: full_number mod 97 == 1 (ISO 7064 MOD 97-10).
-func GenerateAccountNumber() string {
-	accountPart := fmt.Sprintf("%013d", rand.Int63n(9_000_000_000_000)+1_000_000_000_000)
-	base := BankCode + accountPart
-	return base + checkDigits(base)
+// AccountTypeCode returns the 2-digit type code for the account number.
+//
+// Tekući račun: 10 (generički)
+//   Lični: 11, Poslovni: 12, Štedni: 13, Penzionerski: 14,
+//   Za mlade: 15, Za studente: 16, Za nezaposlene: 17
+//
+// Devizni račun: 20 (generički)
+//   Lični: 21, Poslovni: 22
+func AccountTypeCode(tip, vrsta, podvrsta string) string {
+	if tip == "devizni" {
+		if vrsta == "poslovni" {
+			return "22"
+		}
+		return "21"
+	}
+
+	// Tekući
+	if vrsta == "poslovni" {
+		return "12"
+	}
+
+	// Tekući lični — podvrste
+	switch podvrsta {
+	case "stedni":
+		return "13"
+	case "penzionerski":
+		return "14"
+	case "za_mlade":
+		return "15"
+	case "za_studente":
+		return "16"
+	case "za_nezaposlene":
+		return "17"
+	default:
+		return "11" // standardni
+	}
 }
 
-// ValidateAccountNumber returns true if the number is a valid 18-digit account number.
+// GenerateAccountNumber generates an 18-digit account number.
+// Format: BBB (3) + FFFF (4) + RRRRRRRRR (9) + TT (2) = 18
+func GenerateAccountNumber(tip, vrsta string, podvrsta ...string) string {
+	pv := ""
+	if len(podvrsta) > 0 {
+		pv = podvrsta[0]
+	}
+	randomPart := fmt.Sprintf("%09d", rand.Int63n(1_000_000_000))
+	typeCode := AccountTypeCode(tip, vrsta, pv)
+	return BankCode + BranchCode + randomPart + typeCode
+}
+
+// ValidateAccountNumber checks that number is 18 digits and starts with a valid bank code.
 func ValidateAccountNumber(number string) bool {
 	if len(number) != 18 {
 		return false
@@ -27,15 +70,6 @@ func ValidateAccountNumber(number string) bool {
 			return false
 		}
 	}
-	n, err := strconv.ParseUint(number, 10, 64)
-	if err != nil {
-		return false
-	}
-	return n%97 == 1
-}
-
-func checkDigits(base string) string {
-	n, _ := strconv.ParseUint(base+"00", 10, 64)
-	kk := 98 - n%97
-	return fmt.Sprintf("%02d", kk)
+	bankCode := number[:3]
+	return bankCode == "111" || bankCode == "222" || bankCode == "333" || bankCode == "444"
 }

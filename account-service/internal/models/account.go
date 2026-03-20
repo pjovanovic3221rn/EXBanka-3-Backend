@@ -7,6 +7,7 @@ type Account struct {
 	BrojRacuna        string    `gorm:"uniqueIndex;size:18;not null" json:"broj_racuna"`
 	ClientID          *uint     `json:"client_id"`
 	FirmaID           *uint     `json:"firma_id"`
+	ZaposleniID       *uint     `json:"zaposleni_id"`
 	CurrencyID        uint      `gorm:"not null" json:"currency_id"`
 	Tip               string    `gorm:"not null" json:"tip"`
 	Vrsta             string    `gorm:"not null" json:"vrsta"`

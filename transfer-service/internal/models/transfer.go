@@ -10,6 +10,8 @@ type Transfer struct {
 	ValutaIznosa      string    `json:"valuta_iznosa"`
 	KonvertovaniIznos float64   `json:"konvertovani_iznos"`
 	Kurs              float64   `json:"kurs"`
+	Provizija         float64   `json:"provizija"`
+	ProvizijaProcent  float64   `json:"provizija_procent"`
 	Svrha             string    `json:"svrha"`
 	Status            string    `gorm:"default:'uspesno'" json:"status"` // uspesno | neuspesno | u_obradi
 	VremeTransakcije  time.Time `json:"vreme_transakcije"`

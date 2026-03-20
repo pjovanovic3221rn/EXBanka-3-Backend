@@ -99,9 +99,30 @@ func ParseToken(tokenString, secret string) (*Claims, error) {
 	return claims, nil
 }
 
+// employeeRoleLevel returns hierarchy level for employee roles.
+func employeeRoleLevel(role string) int {
+	switch role {
+	case "employeeAdmin":
+		return 4
+	case "employeeSupervisor":
+		return 3
+	case "employeeAgent":
+		return 2
+	case "employeeBasic":
+		return 1
+	default:
+		return 0
+	}
+}
+
 func HasPermission(claims *Claims, perm string) bool {
+	requiredLevel := employeeRoleLevel(perm)
 	for _, p := range claims.Permissions {
 		if p == perm {
+			return true
+		}
+		// Hierarchical: higher employee role grants lower role access
+		if requiredLevel > 0 && employeeRoleLevel(p) >= requiredLevel {
 			return true
 		}
 	}

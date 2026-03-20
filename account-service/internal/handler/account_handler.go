@@ -4,6 +4,8 @@ import (
 	"context"
 
 	accountv1 "github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/gen/proto/account/v1"
+	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/config"
+	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/middleware"
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/models"
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/repository"
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/service"
@@ -25,13 +27,15 @@ type AccountServiceInterface interface {
 type AccountHandler struct {
 	accountv1.UnimplementedAccountServiceServer
 	svc AccountServiceInterface
+	db  *gorm.DB
 }
 
-func NewAccountHandler(db *gorm.DB) *AccountHandler {
+func NewAccountHandler(db *gorm.DB, cfg *config.Config) *AccountHandler {
 	accountRepo := repository.NewAccountRepository(db)
 	currencyRepo := repository.NewCurrencyRepository(db)
-	svc := service.NewAccountServiceWithRepos(accountRepo, currencyRepo)
-	return &AccountHandler{svc: svc}
+	notifSvc := service.NewNotificationService(cfg)
+	svc := service.NewAccountServiceWithRepos(accountRepo, currencyRepo, notifSvc)
+	return &AccountHandler{svc: svc, db: db}
 }
 
 func NewAccountHandlerWithService(svc AccountServiceInterface) *AccountHandler {
@@ -71,6 +75,14 @@ func (h *AccountHandler) CreateAccount(ctx context.Context, req *accountv1.Creat
 		Vrsta:      req.Vrsta,
 		Naziv:      req.Naziv,
 	}
+	// Look up client email for notification
+	if req.ClientId != 0 {
+		var client models.Client
+		if err := h.db.First(&client, req.ClientId).Error; err == nil {
+			input.ClientEmail = client.Email
+			input.ClientName = client.Ime + " " + client.Prezime
+		}
+	}
 	if req.ClientId != 0 {
 		id := uint(req.ClientId)
 		input.ClientID = &id
@@ -78,6 +90,11 @@ func (h *AccountHandler) CreateAccount(ctx context.Context, req *accountv1.Creat
 	if req.FirmaId != 0 {
 		id := uint(req.FirmaId)
 		input.FirmaID = &id
+	}
+	// Extract employee ID from JWT claims
+	if claims, ok := middleware.GetClaimsFromContext(ctx); ok && claims.EmployeeID != 0 {
+		empID := claims.EmployeeID
+		input.ZaposleniID = &empID
 	}
 
 	acc, err := h.svc.CreateAccount(input)

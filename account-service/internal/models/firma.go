@@ -10,7 +10,8 @@ type Firma struct {
 	SifraDelatnostiID uint            `json:"sifra_delatnosti_id"`
 	SifraDelatnosti   SifraDelatnosti `gorm:"foreignKey:SifraDelatnostiID" json:"sifra_delatnosti,omitempty"`
 	Adresa            string          `json:"adresa"`
-	Telefon           string          `json:"telefon"`
+	VlasnikID         *uint           `json:"vlasnik_id"`
+	Client            *Client         `gorm:"foreignKey:VlasnikID" json:"vlasnik,omitempty"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
 }

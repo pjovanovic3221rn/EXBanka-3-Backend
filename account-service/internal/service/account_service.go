@@ -25,23 +25,29 @@ type CurrencyRepositoryInterface interface {
 }
 
 type CreateAccountInput struct {
-	ClientID   *uint
-	FirmaID    *uint
-	CurrencyID uint
-	Tip        string
-	Vrsta      string
-	Naziv      string
+	ClientID       *uint
+	FirmaID        *uint
+	ZaposleniID    *uint
+	CurrencyID     uint
+	Tip            string
+	Vrsta          string
+	Naziv          string
+	PocetnoStanje  float64
+	ClientEmail    string
+	ClientName     string
 }
 
 type AccountService struct {
 	accountRepo  AccountRepositoryInterface
 	currencyRepo CurrencyRepositoryInterface
+	notifSvc     *NotificationService
 }
 
-func NewAccountServiceWithRepos(accountRepo AccountRepositoryInterface, currencyRepo CurrencyRepositoryInterface) *AccountService {
+func NewAccountServiceWithRepos(accountRepo AccountRepositoryInterface, currencyRepo CurrencyRepositoryInterface, notifSvc *NotificationService) *AccountService {
 	return &AccountService{
 		accountRepo:  accountRepo,
 		currencyRepo: currencyRepo,
+		notifSvc:     notifSvc,
 	}
 }
 
@@ -66,15 +72,16 @@ func (s *AccountService) CreateAccount(input CreateAccountInput) (*models.Accoun
 	}
 
 	account := &models.Account{
-		BrojRacuna:        util.GenerateAccountNumber(),
+		BrojRacuna:        util.GenerateAccountNumber(input.Tip, input.Vrsta),
 		ClientID:          input.ClientID,
 		FirmaID:           input.FirmaID,
+		ZaposleniID:       input.ZaposleniID,
 		CurrencyID:        input.CurrencyID,
 		Tip:               input.Tip,
 		Vrsta:             input.Vrsta,
 		Naziv:             input.Naziv,
-		Stanje:            0,
-		RaspolozivoStanje: 0,
+		Stanje:            input.PocetnoStanje,
+		RaspolozivoStanje: input.PocetnoStanje,
 		DnevniLimit:       100000,
 		MesecniLimit:      1000000,
 		Status:            "aktivan",
@@ -83,6 +90,17 @@ func (s *AccountService) CreateAccount(input CreateAccountInput) (*models.Accoun
 	if err := s.accountRepo.Create(account); err != nil {
 		return nil, err
 	}
+
+	// Send email notification to the account owner
+	if s.notifSvc != nil && input.ClientEmail != "" {
+		currency, _ := s.currencyRepo.FindByID(input.CurrencyID)
+		valuta := "RSD"
+		if currency != nil {
+			valuta = currency.Kod
+		}
+		_ = s.notifSvc.SendAccountCreatedEmail(input.ClientEmail, input.ClientName, account.BrojRacuna, input.Tip, valuta)
+	}
+
 	return account, nil
 }
 

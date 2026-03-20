@@ -35,15 +35,14 @@ func AuthInterceptor(cfg *config.Config) grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
+		// Exchange rates and calculations are public — allow unauthenticated access
+		// (needed for internal service-to-service calls from transfer-service)
 		md, ok := metadata.FromIncomingContext(ctx)
-		if !ok {
-			return nil, status.Error(codes.Unauthenticated, "missing metadata")
+		if !ok || len(md.Get("authorization")) == 0 {
+			return handler(ctx, req)
 		}
 
 		authHeaders := md.Get("authorization")
-		if len(authHeaders) == 0 {
-			return nil, status.Error(codes.Unauthenticated, "missing authorization header")
-		}
 
 		tokenStr := strings.TrimPrefix(authHeaders[0], "Bearer ")
 		claims, err := util.ParseToken(tokenStr, cfg.JWTSecret)

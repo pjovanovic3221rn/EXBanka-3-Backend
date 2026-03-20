@@ -27,8 +27,8 @@ type rateListResponse struct {
 }
 
 type rateItem struct {
-	FromCurrency string  `json:"fromCurrency"`
-	ToCurrency   string  `json:"toCurrency"`
+	FromCurrency string  `json:"from"`
+	ToCurrency   string  `json:"to"`
 	Rate         float64 `json:"rate"`
 }
 
