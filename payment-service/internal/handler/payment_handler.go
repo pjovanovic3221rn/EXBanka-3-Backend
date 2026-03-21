@@ -5,6 +5,8 @@ import (
 	"time"
 
 	paymentv1 "github.com/RAF-SI-2025/EXBanka-3-Backend/payment-service/gen/proto/payment/v1"
+	"github.com/RAF-SI-2025/EXBanka-3-Backend/payment-service/internal/config"
+	"github.com/RAF-SI-2025/EXBanka-3-Backend/payment-service/internal/middleware"
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/payment-service/internal/models"
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/payment-service/internal/repository"
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/payment-service/internal/service"
@@ -25,14 +27,16 @@ type PaymentServiceInterface interface {
 type PaymentHandler struct {
 	paymentv1.UnimplementedPaymentServiceServer
 	svc PaymentServiceInterface
+	db  *gorm.DB
 }
 
-func NewPaymentHandler(db *gorm.DB) *PaymentHandler {
+func NewPaymentHandler(db *gorm.DB, cfg *config.Config) *PaymentHandler {
 	accountRepo := repository.NewAccountRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	recipientRepo := repository.NewPaymentRecipientRepository(db)
-	svc := service.NewPaymentServiceWithRepos(accountRepo, paymentRepo, recipientRepo)
-	return &PaymentHandler{svc: svc}
+	notifSvc := service.NewNotificationService(cfg)
+	svc := service.NewPaymentServiceWithRepos(accountRepo, paymentRepo, recipientRepo, notifSvc)
+	return &PaymentHandler{svc: svc, db: db}
 }
 
 func NewPaymentHandlerWithService(svc PaymentServiceInterface) *PaymentHandler {
@@ -105,6 +109,14 @@ func (h *PaymentHandler) CreatePayment(ctx context.Context, req *paymentv1.Creat
 	if req.RecipientId != 0 {
 		id := uint(req.RecipientId)
 		input.RecipientID = &id
+	}
+	// Get client email from JWT claims for verification email
+	if claims, ok := middleware.GetClaimsFromContext(ctx); ok && claims.ClientID != 0 {
+		var client models.Client
+		if err := h.db.First(&client, claims.ClientID).Error; err == nil {
+			input.ClientEmail = client.Email
+			input.ClientName = client.Ime + " " + client.Prezime
+		}
 	}
 
 	p, err := h.svc.CreatePayment(input)

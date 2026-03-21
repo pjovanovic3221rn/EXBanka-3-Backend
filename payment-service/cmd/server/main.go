@@ -42,7 +42,7 @@ func main() {
 	}
 
 	recipientH := handler.NewPaymentRecipientHandler(db)
-	paymentH := handler.NewPaymentHandler(db)
+	paymentH := handler.NewPaymentHandler(db, cfg)
 
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(

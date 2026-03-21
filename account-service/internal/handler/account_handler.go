@@ -21,7 +21,7 @@ type AccountServiceInterface interface {
 	ListAccountsByClient(clientID uint) ([]models.Account, error)
 	ListAllAccounts(filter models.AccountFilter) ([]models.Account, int64, error)
 	UpdateAccountName(id uint, naziv string) error
-	UpdateAccountLimits(id uint, dnevniLimit, mesecniLimit float64) error
+	UpdateAccountLimits(id uint, clientID uint, dnevniLimit, mesecniLimit float64) error
 }
 
 type AccountHandler struct {
@@ -175,7 +175,11 @@ func (h *AccountHandler) UpdateAccountName(ctx context.Context, req *accountv1.U
 }
 
 func (h *AccountHandler) UpdateAccountLimits(ctx context.Context, req *accountv1.UpdateAccountLimitsRequest) (*accountv1.UpdateAccountLimitsResponse, error) {
-	if err := h.svc.UpdateAccountLimits(uint(req.Id), req.DnevniLimit, req.MesecniLimit); err != nil {
+	var clientID uint
+	if claims, ok := middleware.GetClaimsFromContext(ctx); ok && claims.ClientID != 0 {
+		clientID = claims.ClientID
+	}
+	if err := h.svc.UpdateAccountLimits(uint(req.Id), clientID, req.DnevniLimit, req.MesecniLimit); err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "%s", err.Error())
 	}
 

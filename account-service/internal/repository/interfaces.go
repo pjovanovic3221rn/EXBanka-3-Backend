@@ -9,6 +9,7 @@ type AccountRepositoryInterface interface {
 	ListByClientID(clientID uint) ([]models.Account, error)
 	ListAll(filter models.AccountFilter) ([]models.Account, int64, error)
 	UpdateFields(id uint, fields map[string]interface{}) error
+	ExistsByNameForClient(clientID uint, naziv string, excludeID uint) (bool, error)
 }
 
 type CurrencyRepositoryInterface interface {

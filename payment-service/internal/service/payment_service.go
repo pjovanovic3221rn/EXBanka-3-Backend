@@ -35,26 +35,30 @@ type CreatePaymentInput struct {
 	PozivNaBroj       string
 	Svrha             string
 	RecipientID       *uint
-	// If set, creates a new saved recipient during payment
 	AddRecipient      bool
 	RecipientNaziv    string
+	ClientEmail       string
+	ClientName        string
 }
 
 type PaymentService struct {
 	accountRepo   PaymentAccountRepositoryInterface
 	paymentRepo   PaymentRepositoryInterface
 	recipientRepo RecipientRepositoryInterface
+	notifSvc      *NotificationService
 }
 
 func NewPaymentServiceWithRepos(
 	accountRepo PaymentAccountRepositoryInterface,
 	paymentRepo PaymentRepositoryInterface,
 	recipientRepo RecipientRepositoryInterface,
+	notifSvc *NotificationService,
 ) *PaymentService {
 	return &PaymentService{
 		accountRepo:   accountRepo,
 		paymentRepo:   paymentRepo,
 		recipientRepo: recipientRepo,
+		notifSvc:      notifSvc,
 	}
 }
 
@@ -103,6 +107,14 @@ func (s *PaymentService) CreatePayment(input CreatePaymentInput) (*models.Paymen
 
 	if err := s.paymentRepo.Create(payment); err != nil {
 		return nil, fmt.Errorf("failed to create payment: %w", err)
+	}
+
+	// Send verification code via email
+	if s.notifSvc != nil && input.ClientEmail != "" {
+		_ = s.notifSvc.SendVerificationCode(
+			input.ClientEmail, input.ClientName, code,
+			input.Iznos, input.Svrha, input.RacunPrimaocaBroj,
+		)
 	}
 
 	return payment, nil

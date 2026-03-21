@@ -89,3 +89,15 @@ func (r *AccountRepository) ListAll(filter models.AccountFilter) ([]models.Accou
 func (r *AccountRepository) UpdateFields(id uint, fields map[string]interface{}) error {
 	return r.db.Model(&models.Account{}).Where("id = ?", id).Updates(fields).Error
 }
+
+func (r *AccountRepository) ExistsByNameForClient(clientID uint, naziv string, excludeID uint) (bool, error) {
+	var count int64
+	query := r.db.Model(&models.Account{}).Where("client_id = ? AND naziv = ?", clientID, naziv)
+	if excludeID > 0 {
+		query = query.Where("id != ?", excludeID)
+	}
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

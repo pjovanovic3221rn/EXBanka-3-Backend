@@ -19,6 +19,11 @@ var clientRequiredPermissions = map[string]string{
 	"/payment_recipient.v1.PaymentRecipientService/ListRecipients":  models.PermClientBasic,
 	"/payment_recipient.v1.PaymentRecipientService/UpdateRecipient": models.PermClientBasic,
 	"/payment_recipient.v1.PaymentRecipientService/DeleteRecipient": models.PermClientBasic,
+	"/payment.v1.PaymentService/CreatePayment":                      models.PermClientBasic,
+	"/payment.v1.PaymentService/VerifyPayment":                      models.PermClientBasic,
+	"/payment.v1.PaymentService/GetPayment":                         models.PermClientBasic,
+	"/payment.v1.PaymentService/ListPaymentsByAccount":              models.PermClientBasic,
+	"/payment.v1.PaymentService/ListPaymentsByClient":               models.PermClientBasic,
 }
 
 type claimsContextKey struct{}

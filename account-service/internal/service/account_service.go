@@ -15,6 +15,7 @@ type AccountRepositoryInterface interface {
 	ListByClientID(clientID uint) ([]models.Account, error)
 	ListAll(filter models.AccountFilter) ([]models.Account, int64, error)
 	UpdateFields(id uint, fields map[string]interface{}) error
+	ExistsByNameForClient(clientID uint, naziv string, excludeID uint) (bool, error)
 }
 
 // CurrencyRepositoryInterface is defined here to avoid circular imports.
@@ -117,15 +118,40 @@ func (s *AccountService) ListAccountsByClient(clientID uint) ([]models.Account, 
 }
 
 func (s *AccountService) UpdateAccountName(id uint, naziv string) error {
+	if naziv == "" {
+		return fmt.Errorf("naziv ne može biti prazan")
+	}
+	// Check uniqueness of name within client's accounts
+	account, err := s.accountRepo.FindByID(id)
+	if err != nil {
+		return fmt.Errorf("račun nije pronađen: %w", err)
+	}
+	if account.ClientID != nil {
+		exists, err := s.accountRepo.ExistsByNameForClient(*account.ClientID, naziv, id)
+		if err != nil {
+			return fmt.Errorf("greška pri proveri naziva: %w", err)
+		}
+		if exists {
+			return fmt.Errorf("naziv '%s' već postoji za ovog klijenta", naziv)
+		}
+	}
 	return s.accountRepo.UpdateFields(id, map[string]interface{}{"naziv": naziv})
 }
 
-func (s *AccountService) UpdateAccountLimits(id uint, dnevniLimit, mesecniLimit float64) error {
+func (s *AccountService) UpdateAccountLimits(id uint, clientID uint, dnevniLimit, mesecniLimit float64) error {
 	if dnevniLimit < 0 {
-		return fmt.Errorf("dnevni limit cannot be negative")
+		return fmt.Errorf("dnevni limit ne može biti negativan")
 	}
 	if mesecniLimit < 0 {
-		return fmt.Errorf("mesecni limit cannot be negative")
+		return fmt.Errorf("mesečni limit ne može biti negativan")
+	}
+	// Only account owner can change limits
+	account, err := s.accountRepo.FindByID(id)
+	if err != nil {
+		return fmt.Errorf("račun nije pronađen: %w", err)
+	}
+	if account.ClientID == nil || *account.ClientID != clientID {
+		return fmt.Errorf("samo vlasnik računa može menjati limite")
 	}
 	return s.accountRepo.UpdateFields(id, map[string]interface{}{
 		"dnevni_limit":  dnevniLimit,

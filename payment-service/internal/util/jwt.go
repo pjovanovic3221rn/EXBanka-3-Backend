@@ -2,7 +2,6 @@ package util
 
 import (
 	"errors"
-	"strconv"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -67,7 +66,7 @@ func HasPermission(claims *Claims, perm string) bool {
 	return false
 }
 
-// ValidateAccountNumber returns true if the number is a valid 18-digit account number (ISO 7064 MOD 97-10).
+// ValidateAccountNumber returns true if the number is a valid 18-digit account number.
 func ValidateAccountNumber(number string) bool {
 	if len(number) != 18 {
 		return false
@@ -77,9 +76,6 @@ func ValidateAccountNumber(number string) bool {
 			return false
 		}
 	}
-	n, err := strconv.ParseUint(number, 10, 64)
-	if err != nil {
-		return false
-	}
-	return n%97 == 1
+	bankCode := number[:3]
+	return bankCode == "111" || bankCode == "222" || bankCode == "333" || bankCode == "444"
 }

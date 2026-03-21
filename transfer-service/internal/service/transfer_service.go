@@ -95,13 +95,42 @@ func (s *TransferService) CreateTransfer(input CreateTransferInput) (*models.Tra
 	provizija := 0.0
 
 	if sender.CurrencyID != receiver.CurrencyID {
-		// Use selling rate (prodajni kurs): bank sells toCurrency to client.
-		kurs, err = s.exchangeSvc.GetRate(sender.Currency.Kod, receiver.Currency.Kod)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get exchange rate: %w", err)
+		// All cross-currency transfers go through RSD (bazna valuta).
+		// Step 1: from sender currency to RSD
+		// Step 2: from RSD to receiver currency
+		var rsdAmount float64
+
+		if sender.Currency.Kod == "RSD" {
+			// Already in RSD, no first conversion needed
+			rsdAmount = input.Iznos
+			kurs = 1.0
+		} else {
+			// Convert sender currency → RSD (prodajni kurs)
+			kursToRSD, err2 := s.exchangeSvc.GetRate(sender.Currency.Kod, "RSD")
+			if err2 != nil {
+				return nil, fmt.Errorf("failed to get exchange rate %s→RSD: %w", sender.Currency.Kod, err2)
+			}
+			rsdAmount = input.Iznos * kursToRSD
+			kurs = kursToRSD
 		}
 
-		// Commission 0-1% (random for now, in production this would be configurable)
+		if receiver.Currency.Kod == "RSD" {
+			// Receiver is RSD, no second conversion needed
+			konvertovaniIznos = math.Round(rsdAmount*100) / 100
+		} else {
+			// Convert RSD → receiver currency (prodajni kurs)
+			kursFromRSD, err2 := s.exchangeSvc.GetRate("RSD", receiver.Currency.Kod)
+			if err2 != nil {
+				return nil, fmt.Errorf("failed to get exchange rate RSD→%s: %w", receiver.Currency.Kod, err2)
+			}
+			konvertovaniIznos = math.Round(rsdAmount*kursFromRSD*100) / 100
+			// Store effective rate (from→to via RSD)
+			if input.Iznos > 0 {
+				kurs = konvertovaniIznos / input.Iznos
+			}
+		}
+
+		// Commission 0-1%
 		provizijaProcent = math.Round(rand.Float64()*100) / 100 // 0.00 - 1.00%
 		provizija = math.Round(input.Iznos*provizijaProcent) / 100
 
@@ -112,8 +141,6 @@ func (s *TransferService) CreateTransfer(input CreateTransferInput) (*models.Tra
 			return nil, fmt.Errorf("insufficient balance: available %.2f, required %.2f (amount %.2f + commission %.2f)",
 				sender.RaspolozivoStanje, ukupnoZaSkidanje, input.Iznos, provizija)
 		}
-
-		konvertovaniIznos = math.Round(input.Iznos*kurs*100) / 100
 
 		// Update sender: deduct amount + commission
 		if err := s.accountRepo.UpdateFields(sender.ID, map[string]interface{}{
