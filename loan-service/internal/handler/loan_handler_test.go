@@ -32,6 +32,12 @@ func (m *mockLoanService) ListInstallments(_ uint) ([]models.LoanInstallment, er
 	return m.installments, m.err
 }
 func (m *mockLoanService) ListRequests() ([]models.Loan, error) { return m.loans, m.err }
+func (m *mockLoanService) ListRequestsFiltered(_, _ string) ([]models.Loan, error) {
+	return m.loans, m.err
+}
+func (m *mockLoanService) ListAllFiltered(_ service.LoanFilter) ([]models.Loan, error) {
+	return m.loans, m.err
+}
 
 // --- helpers ---
 
@@ -200,6 +206,42 @@ func TestLoanHandler_ListRequests_Returns200(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&resp)
 	if len(resp) != 1 {
 		t.Errorf("expected 1 request, got %d", len(resp))
+	}
+}
+
+// --- ListRequestsFiltered tests ---
+
+func TestLoanHandler_ListRequests_WithVrstaParam_Returns200(t *testing.T) {
+	svc := &mockLoanService{loans: []models.Loan{{ID: 1, Status: "zahtev", Vrsta: "gotovinski"}}}
+	w := getRequest(newHandler(svc), "/api/v1/loans/requests?vrsta=gotovinski")
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var resp []map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp) != 1 {
+		t.Errorf("expected 1 filtered request, got %d", len(resp))
+	}
+}
+
+func TestLoanHandler_ListAll_Returns200(t *testing.T) {
+	svc := &mockLoanService{loans: []models.Loan{{ID: 1, Status: "aktivan"}, {ID: 2, Status: "zatvoren"}}}
+	w := getRequest(newHandler(svc), "/api/v1/loans/all")
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var resp []map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if len(resp) != 2 {
+		t.Errorf("expected 2 loans, got %d", len(resp))
+	}
+}
+
+func TestLoanHandler_ListAll_WithStatusParam_Returns200(t *testing.T) {
+	svc := &mockLoanService{loans: []models.Loan{{ID: 1, Status: "aktivan"}}}
+	w := getRequest(newHandler(svc), "/api/v1/loans/all?status=aktivan")
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
 	}
 }
 

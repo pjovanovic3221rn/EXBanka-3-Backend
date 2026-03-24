@@ -13,6 +13,13 @@ import (
 // ErrInvalidInput is returned by service methods when the caller provides invalid data.
 var ErrInvalidInput = errors.New("invalid input")
 
+// LoanFilter holds optional filter criteria for loan queries.
+type LoanFilter struct {
+	Vrsta      string
+	BrojRacuna string
+	Status     string
+}
+
 // LoanRepositoryInterface allows mocking in tests.
 type LoanRepositoryInterface interface {
 	Create(loan *models.Loan) error
@@ -20,6 +27,7 @@ type LoanRepositoryInterface interface {
 	Save(loan *models.Loan) error
 	ListByClientID(clientID uint) ([]models.Loan, error)
 	ListByStatus(status string) ([]models.Loan, error)
+	ListFiltered(filter LoanFilter) ([]models.Loan, error)
 }
 
 // InstallmentRepositoryInterface allows mocking in tests.
@@ -243,6 +251,20 @@ func (s *LoanService) GetByID(loanID uint) (*models.Loan, error) {
 // ListInstallments returns all installments for a loan.
 func (s *LoanService) ListInstallments(loanID uint) ([]models.LoanInstallment, error) {
 	return s.installmentRepo.ListByLoanID(loanID)
+}
+
+// ListRequestsFiltered returns pending loan requests (status="zahtev") with optional filters.
+func (s *LoanService) ListRequestsFiltered(vrsta, brojRacuna string) ([]models.Loan, error) {
+	return s.loanRepo.ListFiltered(LoanFilter{
+		Status:     "zahtev",
+		Vrsta:      vrsta,
+		BrojRacuna: brojRacuna,
+	})
+}
+
+// ListAllFiltered returns all loans matching the given filter.
+func (s *LoanService) ListAllFiltered(filter LoanFilter) ([]models.Loan, error) {
+	return s.loanRepo.ListFiltered(filter)
 }
 
 // RemainingDebt sums the amounts of all unpaid (ocekuje / kasni) installments.

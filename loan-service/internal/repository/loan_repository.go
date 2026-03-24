@@ -2,6 +2,7 @@ package repository
 
 import (
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/loan-service/internal/models"
+	"github.com/RAF-SI-2025/EXBanka-3-Backend/loan-service/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -46,6 +47,25 @@ func (r *LoanRepository) ListByStatus(status string) ([]models.Loan, error) {
 	if err := r.db.Where("status = ?", status).
 		Order("created_at ASC").
 		Find(&loans).Error; err != nil {
+		return nil, err
+	}
+	return loans, nil
+}
+
+// ListFiltered returns loans matching the non-empty fields of the filter.
+func (r *LoanRepository) ListFiltered(filter service.LoanFilter) ([]models.Loan, error) {
+	var loans []models.Loan
+	q := r.db.Order("created_at ASC")
+	if filter.Status != "" {
+		q = q.Where("status = ?", filter.Status)
+	}
+	if filter.Vrsta != "" {
+		q = q.Where("vrsta = ?", filter.Vrsta)
+	}
+	if filter.BrojRacuna != "" {
+		q = q.Where("broj_racuna = ?", filter.BrojRacuna)
+	}
+	if err := q.Find(&loans).Error; err != nil {
 		return nil, err
 	}
 	return loans, nil

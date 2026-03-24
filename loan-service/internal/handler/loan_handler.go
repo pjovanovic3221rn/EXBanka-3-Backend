@@ -20,6 +20,8 @@ type LoanServiceInterface interface {
 	GetByID(loanID uint) (*models.Loan, error)
 	ListInstallments(loanID uint) ([]models.LoanInstallment, error)
 	ListRequests() ([]models.Loan, error)
+	ListRequestsFiltered(vrsta, brojRacuna string) ([]models.Loan, error)
+	ListAllFiltered(filter service.LoanFilter) ([]models.Loan, error)
 }
 
 type LoanHandler struct {
@@ -46,9 +48,13 @@ func (h *LoanHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 1 && parts[0] == "request" && r.Method == http.MethodPost:
 		h.handleRequest(w, r)
 
-	// GET /api/v1/loans/requests
+	// GET /api/v1/loans/requests[?vrsta=...&broj_racuna=...]
 	case len(parts) == 1 && parts[0] == "requests" && r.Method == http.MethodGet:
 		h.handleListRequests(w, r)
+
+	// GET /api/v1/loans/all[?vrsta=...&status=...&broj_racuna=...]
+	case len(parts) == 1 && parts[0] == "all" && r.Method == http.MethodGet:
+		h.handleListAll(w, r)
 
 	// GET /api/v1/loans/client/{id}
 	case len(parts) == 2 && parts[0] == "client" && r.Method == http.MethodGet:
@@ -113,10 +119,27 @@ func (h *LoanHandler) handleRequest(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(loan)
 }
 
-func (h *LoanHandler) handleListRequests(w http.ResponseWriter, _ *http.Request) {
-	loans, err := h.svc.ListRequests()
+func (h *LoanHandler) handleListRequests(w http.ResponseWriter, r *http.Request) {
+	vrsta := r.URL.Query().Get("vrsta")
+	brojRacuna := r.URL.Query().Get("broj_racuna")
+	loans, err := h.svc.ListRequestsFiltered(vrsta, brojRacuna)
 	if err != nil {
 		jsonError(w, "failed to list requests", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, loans)
+}
+
+func (h *LoanHandler) handleListAll(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	filter := service.LoanFilter{
+		Vrsta:      q.Get("vrsta"),
+		BrojRacuna: q.Get("broj_racuna"),
+		Status:     q.Get("status"),
+	}
+	loans, err := h.svc.ListAllFiltered(filter)
+	if err != nil {
+		jsonError(w, "failed to list loans", http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, loans)
