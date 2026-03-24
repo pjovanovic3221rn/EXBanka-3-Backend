@@ -116,6 +116,11 @@ func (s *CardService) CreateCard(input CreateCardInput) (*models.Card, error) {
 	return card, nil
 }
 
+// GetCard returns a single card by ID, or nil if not found.
+func (s *CardService) GetCard(id uint) (*models.Card, error) {
+	return s.cardRepo.FindByID(id)
+}
+
 // ListByAccount returns all cards for a given account.
 func (s *CardService) ListByAccount(accountID uint) ([]models.Card, error) {
 	cards, err := s.cardRepo.ListByAccountID(accountID)

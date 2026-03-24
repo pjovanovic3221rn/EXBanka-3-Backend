@@ -16,6 +16,7 @@ import (
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/handler"
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/middleware"
 	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/repository"
+	"github.com/RAF-SI-2025/EXBanka-3-Backend/account-service/internal/service"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -91,12 +92,19 @@ func main() {
 	accountRepo := repository.NewAccountRepository(db)
 	listClientAccH := handler.NewListClientAccountsHTTPHandler(accountRepo)
 
+	cardRepo := repository.NewCardRepository(db)
+	notifSvc := service.NewNotificationService(cfg)
+	cardSvc := service.NewCardService(cardRepo, accountRepo, notifSvc)
+	cardH := handler.NewCardHTTPHandler(cardSvc)
+
 	httpMux := http.NewServeMux()
 	httpMux.HandleFunc("/health", healthCheck)
 	httpMux.Handle("/api/v1/firme", middleware.CORS(http.HandlerFunc(firmaH.Create)))
 	httpMux.Handle("/api/v1/sifre-delatnosti", middleware.CORS(http.HandlerFunc(firmaH.ListSifreDelatnosti)))
 	httpMux.Handle("/api/v1/accounts/create", middleware.CORS(createAccH))
 	httpMux.Handle("/api/v1/accounts/client/", middleware.CORS(listClientAccH))
+	httpMux.Handle("/api/v1/cards/", middleware.CORS(cardH))
+	httpMux.Handle("/api/v1/cards", middleware.CORS(cardH))
 	httpMux.Handle("/", middleware.CORS(gwMux))
 
 	httpServer := &http.Server{
