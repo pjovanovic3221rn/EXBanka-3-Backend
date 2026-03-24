@@ -146,7 +146,8 @@ func (m *mockLoanRepo) FindByID(id uint) (*models.Loan, error) {
 	}
 	return nil, errors.New("not found")
 }
-func (m *mockLoanRepo) Save(l *models.Loan) error { m.saved = l; return nil }
+func (m *mockLoanRepo) Save(l *models.Loan) error                        { m.saved = l; return nil }
+func (m *mockLoanRepo) ListByClientID(_ uint) ([]models.Loan, error)     { return nil, nil }
 
 type mockInstallmentRepo struct {
 	batch []models.LoanInstallment
@@ -155,6 +156,9 @@ type mockInstallmentRepo struct {
 func (m *mockInstallmentRepo) CreateBatch(items []models.LoanInstallment) error {
 	m.batch = items
 	return nil
+}
+func (m *mockInstallmentRepo) ListByLoanID(_ uint) ([]models.LoanInstallment, error) {
+	return m.batch, nil
 }
 
 func newSvc() (*service.LoanService, *mockLoanRepo, *mockInstallmentRepo) {

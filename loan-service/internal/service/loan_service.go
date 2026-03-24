@@ -14,11 +14,13 @@ type LoanRepositoryInterface interface {
 	Create(loan *models.Loan) error
 	FindByID(id uint) (*models.Loan, error)
 	Save(loan *models.Loan) error
+	ListByClientID(clientID uint) ([]models.Loan, error)
 }
 
 // InstallmentRepositoryInterface allows mocking in tests.
 type InstallmentRepositoryInterface interface {
 	CreateBatch(items []models.LoanInstallment) error
+	ListByLoanID(loanID uint) ([]models.LoanInstallment, error)
 }
 
 // LoanService handles loan request, approval, and rejection logic.
@@ -192,6 +194,74 @@ func (s *LoanService) RejectLoan(loanID, zaposleniID uint) (*models.Loan, error)
 		return nil, fmt.Errorf("failed to save loan: %w", err)
 	}
 	return loan, nil
+}
+
+// ListByClient returns all loans for a client, sorted descending by amount.
+func (s *LoanService) ListByClient(clientID uint) ([]models.Loan, error) {
+	loans, err := s.loanRepo.ListByClientID(clientID)
+	if err != nil {
+		return nil, err
+	}
+	if loans == nil {
+		return []models.Loan{}, nil
+	}
+	// sort descending by Iznos
+	for i := 0; i < len(loans)-1; i++ {
+		for j := i + 1; j < len(loans); j++ {
+			if loans[j].Iznos > loans[i].Iznos {
+				loans[i], loans[j] = loans[j], loans[i]
+			}
+		}
+	}
+	return loans, nil
+}
+
+// GetByID returns a loan by ID with its installments preloaded.
+func (s *LoanService) GetByID(loanID uint) (*models.Loan, error) {
+	loan, err := s.loanRepo.FindByID(loanID)
+	if err != nil {
+		return nil, fmt.Errorf("loan not found: %w", err)
+	}
+	installments, err := s.installmentRepo.ListByLoanID(loanID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load installments: %w", err)
+	}
+	loan.Installments = installments
+	return loan, nil
+}
+
+// ListInstallments returns all installments for a loan.
+func (s *LoanService) ListInstallments(loanID uint) ([]models.LoanInstallment, error) {
+	return s.installmentRepo.ListByLoanID(loanID)
+}
+
+// RemainingDebt sums the amounts of all unpaid (ocekuje / kasni) installments.
+// Exported for use in tests and handlers.
+func RemainingDebt(installments []models.LoanInstallment) float64 {
+	var total float64
+	for _, inst := range installments {
+		if inst.Status == "ocekuje" || inst.Status == "kasni" {
+			total += inst.Iznos
+		}
+	}
+	return total
+}
+
+// NextInstallment returns the earliest upcoming installment with status "ocekuje",
+// or nil if all installments are paid.
+// Exported for use in tests and handlers.
+func NextInstallment(installments []models.LoanInstallment) *models.LoanInstallment {
+	var next *models.LoanInstallment
+	for i := range installments {
+		inst := &installments[i]
+		if inst.Status != "ocekuje" {
+			continue
+		}
+		if next == nil || inst.DatumDospeca.Before(next.DatumDospeca) {
+			next = inst
+		}
+	}
+	return next
 }
 
 // generateInstallments builds the full installment schedule for a loan.
