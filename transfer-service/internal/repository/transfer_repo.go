@@ -17,6 +17,10 @@ func (r *TransferRepository) Create(transfer *models.Transfer) error {
 	return r.db.Create(transfer).Error
 }
 
+func (r *TransferRepository) Save(transfer *models.Transfer) error {
+	return r.db.Save(transfer).Error
+}
+
 func (r *TransferRepository) FindByID(id uint) (*models.Transfer, error) {
 	var transfer models.Transfer
 	if err := r.db.

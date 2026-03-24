@@ -10,6 +10,7 @@ type AccountRepositoryInterface interface {
 type TransferRepositoryInterface interface {
 	Create(transfer *models.Transfer) error
 	FindByID(id uint) (*models.Transfer, error)
+	Save(transfer *models.Transfer) error
 	ListByAccountID(accountID uint, filter models.TransferFilter) ([]models.Transfer, int64, error)
 	ListByClientID(clientID uint, filter models.TransferFilter) ([]models.Transfer, int64, error)
 }

@@ -18,7 +18,7 @@ func TestTransfer_GormTags(t *testing.T) {
 		{"RacunPosiljaocaID", "not null"},
 		{"RacunPrimaocaID", "not null"},
 		{"Iznos", "not null"},
-		{"Status", "default:'uspesno'"},
+		{"Status", "default:'u_obradi'"},
 	}
 
 	for _, tt := range tests {
@@ -75,6 +75,13 @@ func TestTransfer_ForeignKeyRelations(t *testing.T) {
 	}
 	if tr.RacunPrimaoca.ID != 2 {
 		t.Errorf("expected RacunPrimaoca.ID=2, got %d", tr.RacunPrimaoca.ID)
+	}
+}
+
+func TestTransfer_HasVerifikacioniKod(t *testing.T) {
+	tr := models.Transfer{VerifikacioniKod: "123456"}
+	if tr.VerifikacioniKod != "123456" {
+		t.Errorf("expected VerifikacioniKod=123456, got %q", tr.VerifikacioniKod)
 	}
 }
 

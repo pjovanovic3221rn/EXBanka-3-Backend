@@ -17,6 +17,7 @@ import (
 // TransferServiceInterface allows handler tests to inject a mock service.
 type TransferServiceInterface interface {
 	CreateTransfer(input service.CreateTransferInput) (*models.Transfer, error)
+	VerifyTransfer(transferID uint, verificationCode string) (*models.Transfer, error)
 	ListTransfersByAccount(accountID uint, filter models.TransferFilter) ([]models.Transfer, int64, error)
 	ListTransfersByClient(clientID uint, filter models.TransferFilter) ([]models.Transfer, int64, error)
 }
@@ -105,6 +106,11 @@ func parseFilterFromClient(req *transferv1.ListTransfersByClientRequest) models.
 		}
 	}
 	return f
+}
+
+// VerifyTransfer delegates to the underlying service (used by the custom HTTP verify handler).
+func (h *TransferHandler) VerifyTransfer(transferID uint, verificationCode string) (*models.Transfer, error) {
+	return h.svc.VerifyTransfer(transferID, verificationCode)
 }
 
 func (h *TransferHandler) CreateTransfer(ctx context.Context, req *transferv1.CreateTransferRequest) (*transferv1.CreateTransferResponse, error) {

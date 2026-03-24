@@ -47,7 +47,13 @@ func (m *mockTransferRepo) Create(t *models.Transfer) error {
 	m.created = t
 	return nil
 }
-func (m *mockTransferRepo) FindByID(_ uint) (*models.Transfer, error) { return nil, nil }
+func (m *mockTransferRepo) FindByID(id uint) (*models.Transfer, error) {
+	if m.created != nil && m.created.ID == id {
+		return m.created, nil
+	}
+	return nil, errors.New("not found")
+}
+func (m *mockTransferRepo) Save(t *models.Transfer) error { m.created = t; return nil }
 func (m *mockTransferRepo) ListByAccountID(_ uint, filter models.TransferFilter) ([]models.Transfer, int64, error) {
 	m.capturedAccountFilter = filter
 	return m.listByAccountResult, m.listByAccountTotal, nil
@@ -129,8 +135,8 @@ func TestCreateTransfer_SameCurrency_Success(t *testing.T) {
 	if tr.Iznos != 1000 {
 		t.Errorf("expected Iznos=1000, got %f", tr.Iznos)
 	}
-	if tr.Status != "uspesno" {
-		t.Errorf("expected Status=uspesno, got %s", tr.Status)
+	if tr.Status != "u_obradi" {
+		t.Errorf("expected Status=u_obradi (pending verification), got %s", tr.Status)
 	}
 	if tr.Kurs != 1.0 {
 		t.Errorf("expected Kurs=1.0 for same-currency, got %f", tr.Kurs)
@@ -217,6 +223,143 @@ func TestCreateTransfer_DailyLimitExceeded_ReturnsError(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected daily limit error, got nil")
+	}
+}
+
+// --- Verify flow tests ---
+
+func TestCreateTransfer_SetsStatusUObradi(t *testing.T) {
+	accountRepo := &mockAccountRepo{accounts: map[uint]*models.Account{
+		1: rsdAccount(1, 5000),
+		2: rsdAccount(2, 1000),
+	}}
+	transferRepo := &mockTransferRepo{}
+	svc := service.NewTransferServiceWithRepos(accountRepo, transferRepo, &mockExchangeRateService{})
+
+	tr, err := svc.CreateTransfer(service.CreateTransferInput{
+		RacunPosiljaocaID: 1, RacunPrimaocaID: 2, Iznos: 1000, Svrha: "Test",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tr.Status != "u_obradi" {
+		t.Errorf("expected Status=u_obradi, got %s", tr.Status)
+	}
+}
+
+func TestCreateTransfer_GeneratesVerifikacioniKod(t *testing.T) {
+	accountRepo := &mockAccountRepo{accounts: map[uint]*models.Account{
+		1: rsdAccount(1, 5000),
+		2: rsdAccount(2, 1000),
+	}}
+	svc := service.NewTransferServiceWithRepos(accountRepo, &mockTransferRepo{}, &mockExchangeRateService{})
+
+	tr, err := svc.CreateTransfer(service.CreateTransferInput{
+		RacunPosiljaocaID: 1, RacunPrimaocaID: 2, Iznos: 100,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tr.VerifikacioniKod) != 6 {
+		t.Errorf("expected 6-digit code, got %q", tr.VerifikacioniKod)
+	}
+}
+
+func TestCreateTransfer_DoesNotUpdateSenderBalance(t *testing.T) {
+	accountRepo := newCaptureRepo(map[uint]*models.Account{
+		1: rsdAccount(1, 5000),
+		2: rsdAccount(2, 0),
+	})
+	svc := service.NewTransferServiceWithRepos(accountRepo, &mockTransferRepo{}, &mockExchangeRateService{})
+
+	_, err := svc.CreateTransfer(service.CreateTransferInput{
+		RacunPosiljaocaID: 1, RacunPrimaocaID: 2, Iznos: 1000,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, updated := accountRepo.updates[1]; updated {
+		t.Error("expected sender balance NOT to be updated in CreateTransfer (deferred to VerifyTransfer)")
+	}
+}
+
+func TestVerifyTransfer_ValidCode_SetsStatusUspesno(t *testing.T) {
+	tr := &models.Transfer{
+		ID: 1, RacunPosiljaocaID: 1, RacunPrimaocaID: 2,
+		Iznos: 500, Status: "u_obradi", VerifikacioniKod: "111111",
+	}
+	accountRepo := newCaptureRepo(map[uint]*models.Account{
+		1: rsdAccount(1, 5000),
+		2: rsdAccount(2, 0),
+	})
+	transferRepo := &mockTransferRepo{created: tr}
+	svc := service.NewTransferServiceWithRepos(accountRepo, transferRepo, &mockExchangeRateService{})
+
+	result, err := svc.VerifyTransfer(1, "111111")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Status != "uspesno" {
+		t.Errorf("expected Status=uspesno, got %s", result.Status)
+	}
+}
+
+func TestVerifyTransfer_ValidCode_UpdatesSenderBalance(t *testing.T) {
+	tr := &models.Transfer{
+		ID: 1, RacunPosiljaocaID: 1, RacunPrimaocaID: 2,
+		Iznos: 500, Status: "u_obradi", VerifikacioniKod: "222222",
+		ValutaIznosa: "RSD", KonvertovaniIznos: 500,
+	}
+	accountRepo := newCaptureRepo(map[uint]*models.Account{
+		1: rsdAccount(1, 5000),
+		2: rsdAccount(2, 0),
+	})
+	transferRepo := &mockTransferRepo{created: tr}
+	svc := service.NewTransferServiceWithRepos(accountRepo, transferRepo, &mockExchangeRateService{})
+
+	_, err := svc.VerifyTransfer(1, "222222")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	update, ok := accountRepo.updates[1]
+	if !ok {
+		t.Fatal("expected sender account to be updated in VerifyTransfer")
+	}
+	newBalance, _ := update["stanje"].(float64)
+	if newBalance != 4500 {
+		t.Errorf("expected sender stanje=4500, got %f", newBalance)
+	}
+}
+
+func TestVerifyTransfer_InvalidCode_ReturnsError(t *testing.T) {
+	tr := &models.Transfer{
+		ID: 1, Status: "u_obradi", VerifikacioniKod: "333333",
+	}
+	svc := service.NewTransferServiceWithRepos(
+		newCaptureRepo(map[uint]*models.Account{1: rsdAccount(1, 1000)}),
+		&mockTransferRepo{created: tr},
+		&mockExchangeRateService{},
+	)
+
+	_, err := svc.VerifyTransfer(1, "000000")
+	if err == nil {
+		t.Fatal("expected error for invalid code, got nil")
+	}
+}
+
+func TestVerifyTransfer_NonPendingTransfer_ReturnsError(t *testing.T) {
+	tr := &models.Transfer{
+		ID: 1, Status: "uspesno", VerifikacioniKod: "444444",
+	}
+	svc := service.NewTransferServiceWithRepos(
+		newCaptureRepo(map[uint]*models.Account{}),
+		&mockTransferRepo{created: tr},
+		&mockExchangeRateService{},
+	)
+
+	_, err := svc.VerifyTransfer(1, "444444")
+	if err == nil {
+		t.Fatal("expected error for non-pending transfer, got nil")
 	}
 }
 
@@ -332,66 +475,54 @@ func TestCreateTransfer_MonthlySpendingExceedsLimit_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestCreateTransfer_Success_UpdatesDnevnaPotrosnja(t *testing.T) {
-	accountRepo := newCaptureRepo(map[uint]*models.Account{
-		1: {
-			ID: 1, RaspolozivoStanje: 10000, Stanje: 10000,
-			DnevniLimit: 100000, MesecniLimit: 1000000,
-			DnevnaPotrosnja: 1000, MesecnaPotrosnja: 5000,
-			CurrencyID: 1, Currency: models.Currency{Kod: "RSD"},
-		},
-		2: rsdAccount(2, 0),
-	})
-	svc := service.NewTransferServiceWithRepos(accountRepo, &mockTransferRepo{}, &mockExchangeRateService{})
+func TestVerifyTransfer_UpdatesDnevnaPotrosnja(t *testing.T) {
+	sender := &models.Account{
+		ID: 1, RaspolozivoStanje: 10000, Stanje: 10000,
+		DnevniLimit: 100000, MesecniLimit: 1000000,
+		DnevnaPotrosnja: 1000, MesecnaPotrosnja: 5000,
+		CurrencyID: 1, Currency: models.Currency{Kod: "RSD"},
+	}
+	tr := &models.Transfer{
+		ID: 1, RacunPosiljaocaID: 1, RacunPrimaocaID: 2,
+		Iznos: 500, KonvertovaniIznos: 500, ValutaIznosa: "RSD",
+		Status: "u_obradi", VerifikacioniKod: "555555",
+	}
+	accountRepo := newCaptureRepo(map[uint]*models.Account{1: sender, 2: rsdAccount(2, 0)})
+	svc := service.NewTransferServiceWithRepos(accountRepo, &mockTransferRepo{created: tr}, &mockExchangeRateService{})
 
-	_, err := svc.CreateTransfer(service.CreateTransferInput{
-		RacunPosiljaocaID: 1, RacunPrimaocaID: 2, Iznos: 500,
-	})
+	_, err := svc.VerifyTransfer(1, "555555")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	senderUpdate, ok := accountRepo.updates[1]
-	if !ok {
-		t.Fatal("expected sender account to be updated")
-	}
-	newDnevna, ok := senderUpdate["dnevna_potrosnja"].(float64)
-	if !ok {
-		t.Fatal("dnevna_potrosnja not updated in sender account")
-	}
+	senderUpdate := accountRepo.updates[1]
+	newDnevna, _ := senderUpdate["dnevna_potrosnja"].(float64)
 	if newDnevna != 1500 {
-		t.Errorf("expected dnevna_potrosnja=1500, got %f", newDnevna)
+		t.Errorf("expected dnevna_potrosnja=1500 after verify, got %f", newDnevna)
 	}
 }
 
-func TestCreateTransfer_Success_UpdatesMesecnaPotrosnja(t *testing.T) {
-	accountRepo := newCaptureRepo(map[uint]*models.Account{
-		1: {
-			ID: 1, RaspolozivoStanje: 10000, Stanje: 10000,
-			DnevniLimit: 100000, MesecniLimit: 1000000,
-			DnevnaPotrosnja: 1000, MesecnaPotrosnja: 5000,
-			CurrencyID: 1, Currency: models.Currency{Kod: "RSD"},
-		},
-		2: rsdAccount(2, 0),
-	})
-	svc := service.NewTransferServiceWithRepos(accountRepo, &mockTransferRepo{}, &mockExchangeRateService{})
+func TestVerifyTransfer_UpdatesMesecnaPotrosnja(t *testing.T) {
+	sender := &models.Account{
+		ID: 1, RaspolozivoStanje: 10000, Stanje: 10000,
+		DnevniLimit: 100000, MesecniLimit: 1000000,
+		DnevnaPotrosnja: 1000, MesecnaPotrosnja: 5000,
+		CurrencyID: 1, Currency: models.Currency{Kod: "RSD"},
+	}
+	tr := &models.Transfer{
+		ID: 1, RacunPosiljaocaID: 1, RacunPrimaocaID: 2,
+		Iznos: 500, KonvertovaniIznos: 500, ValutaIznosa: "RSD",
+		Status: "u_obradi", VerifikacioniKod: "666666",
+	}
+	accountRepo := newCaptureRepo(map[uint]*models.Account{1: sender, 2: rsdAccount(2, 0)})
+	svc := service.NewTransferServiceWithRepos(accountRepo, &mockTransferRepo{created: tr}, &mockExchangeRateService{})
 
-	_, err := svc.CreateTransfer(service.CreateTransferInput{
-		RacunPosiljaocaID: 1, RacunPrimaocaID: 2, Iznos: 500,
-	})
+	_, err := svc.VerifyTransfer(1, "666666")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	senderUpdate, ok := accountRepo.updates[1]
-	if !ok {
-		t.Fatal("expected sender account to be updated")
-	}
-	newMesecna, ok := senderUpdate["mesecna_potrosnja"].(float64)
-	if !ok {
-		t.Fatal("mesecna_potrosnja not updated in sender account")
-	}
+	senderUpdate := accountRepo.updates[1]
+	newMesecna, _ := senderUpdate["mesecna_potrosnja"].(float64)
 	if newMesecna != 5500 {
-		t.Errorf("expected mesecna_potrosnja=5500, got %f", newMesecna)
+		t.Errorf("expected mesecna_potrosnja=5500 after verify, got %f", newMesecna)
 	}
 }

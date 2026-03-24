@@ -13,7 +13,8 @@ type Transfer struct {
 	Provizija         float64   `json:"provizija"`
 	ProvizijaProcent  float64   `json:"provizija_procent"`
 	Svrha             string    `json:"svrha"`
-	Status            string    `gorm:"default:'uspesno'" json:"status"` // uspesno | neuspesno | u_obradi
+	Status            string    `gorm:"default:'u_obradi'" json:"status"` // uspesno | neuspesno | u_obradi
+	VerifikacioniKod  string    `json:"-"`
 	VremeTransakcije  time.Time `json:"vreme_transakcije"`
 	RacunPosiljaoca   Account   `gorm:"foreignKey:RacunPosiljaocaID" json:"racun_posiljaoca,omitempty"`
 	RacunPrimaoca     Account   `gorm:"foreignKey:RacunPrimaocaID" json:"racun_primaoca,omitempty"`
