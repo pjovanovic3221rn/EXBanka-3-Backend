@@ -8,9 +8,9 @@ import (
 // IIN prefixes per card type (Bank Identification Number)
 var cardIIN = map[string]string{
 	"visa":       "453201", // Visa IIN starting with 4
-	"mastercard": "542523", // Mastercard IIN starting with 5
-	"dinacard":   "655200", // Dinacard IIN
-	"amex":       "371449", // Amex IIN starting with 37
+	"mastercard": "542523", // Mastercard IIN starting with 51-55
+	"dinacard":   "989100", // DinaCard IIN starting with 9891
+	"amex":       "371449", // Amex IIN starting with 34 or 37
 }
 
 // GenerateCardNumber generates a 16-digit card number with a valid Luhn check digit.

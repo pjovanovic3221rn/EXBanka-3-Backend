@@ -96,14 +96,19 @@ func (h *LoanHandler) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Vrsta      string  `json:"vrsta"`
-		BrojRacuna string  `json:"broj_racuna"`
-		Iznos      float64 `json:"iznos"`
-		Period     int     `json:"period"`
-		TipKamate  string  `json:"tip_kamate"`
-		ClientID   uint    `json:"client_id"`
-		CurrencyID uint    `json:"currency_id"`
-		EURIBOR    float64 `json:"euribor_rate"`
+		Vrsta             string  `json:"vrsta"`
+		BrojRacuna        string  `json:"broj_racuna"`
+		Iznos             float64 `json:"iznos"`
+		Period            int     `json:"period"`
+		TipKamate         string  `json:"tip_kamate"`
+		ClientID          uint    `json:"client_id"`
+		CurrencyID        uint    `json:"currency_id"`
+		EURIBOR           float64 `json:"euribor_rate"`
+		SvrhaKredita      string  `json:"svrha_kredita"`
+		IznosMesecnePlate float64 `json:"iznos_mesecne_plate"`
+		StatusZaposlenja  string  `json:"status_zaposlenja"`
+		PeriodZaposlenja  string  `json:"period_zaposlenja"`
+		KontaktTelefon    string  `json:"kontakt_telefon"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -121,14 +126,19 @@ func (h *LoanHandler) handleRequest(w http.ResponseWriter, r *http.Request) {
 		body.ClientID = claims.ClientID
 	}
 	loan, err := h.svc.RequestLoan(service.CreateLoanInput{
-		Vrsta:       body.Vrsta,
-		BrojRacuna:  body.BrojRacuna,
-		Iznos:       body.Iznos,
-		Period:      body.Period,
-		TipKamate:   body.TipKamate,
-		ClientID:    body.ClientID,
-		CurrencyID:  body.CurrencyID,
-		EURIBORRate: body.EURIBOR,
+		Vrsta:             body.Vrsta,
+		BrojRacuna:        body.BrojRacuna,
+		Iznos:             body.Iznos,
+		Period:            body.Period,
+		TipKamate:         body.TipKamate,
+		ClientID:          body.ClientID,
+		CurrencyID:        body.CurrencyID,
+		EURIBORRate:       body.EURIBOR,
+		SvrhaKredita:      body.SvrhaKredita,
+		IznosMesecnePlate: body.IznosMesecnePlate,
+		StatusZaposlenja:  body.StatusZaposlenja,
+		PeriodZaposlenja:  body.PeriodZaposlenja,
+		KontaktTelefon:    body.KontaktTelefon,
 	})
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidInput) {

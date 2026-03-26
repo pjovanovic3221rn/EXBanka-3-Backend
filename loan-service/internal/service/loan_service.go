@@ -132,6 +132,13 @@ type CreateLoanInput struct {
 	CurrencyID uint
 	// EURIBORRate is used only for varijabilna loans; defaults to 0.
 	EURIBORRate float64
+
+	// Additional fields from specification
+	SvrhaKredita      string
+	IznosMesecnePlate float64
+	StatusZaposlenja  string
+	PeriodZaposlenja  string
+	KontaktTelefon    string
 }
 
 // RequestLoan creates a new loan request (status = "zahtev").
@@ -147,6 +154,36 @@ func (s *LoanService) RequestLoan(input CreateLoanInput) (*models.Loan, error) {
 	}
 	if input.Period < 1 {
 		return nil, fmt.Errorf("%w: period must be at least 1 month", ErrInvalidInput)
+	}
+	// Validate period against allowed values for loan type
+	validPeriods := models.ValidPeriods()
+	if allowed, ok := validPeriods[input.Vrsta]; ok {
+		periodValid := false
+		for _, p := range allowed {
+			if input.Period == p {
+				periodValid = true
+				break
+			}
+		}
+		if !periodValid {
+			return nil, fmt.Errorf("%w: period %d is not allowed for loan type %s", ErrInvalidInput, input.Period, input.Vrsta)
+		}
+	}
+	// Validate required additional fields
+	if strings.TrimSpace(input.SvrhaKredita) == "" {
+		return nil, fmt.Errorf("%w: svrha_kredita is required", ErrInvalidInput)
+	}
+	if input.IznosMesecnePlate <= 0 {
+		return nil, fmt.Errorf("%w: iznos_mesecne_plate must be positive", ErrInvalidInput)
+	}
+	if !contains(models.ValidEmploymentStatuses(), input.StatusZaposlenja) {
+		return nil, fmt.Errorf("%w: invalid status_zaposlenja: %s", ErrInvalidInput, input.StatusZaposlenja)
+	}
+	if strings.TrimSpace(input.PeriodZaposlenja) == "" {
+		return nil, fmt.Errorf("%w: period_zaposlenja is required", ErrInvalidInput)
+	}
+	if strings.TrimSpace(input.KontaktTelefon) == "" {
+		return nil, fmt.Errorf("%w: kontakt_telefon is required", ErrInvalidInput)
 	}
 	if strings.TrimSpace(input.BrojRacuna) == "" {
 		return nil, fmt.Errorf("%w: broj_racuna is required", ErrInvalidInput)
@@ -180,19 +217,24 @@ func (s *LoanService) RequestLoan(input CreateLoanInput) (*models.Loan, error) {
 	iznosRate := CalculateInstallment(input.Iznos, kamatnaStopa, input.Period)
 
 	loan := &models.Loan{
-		Vrsta:          input.Vrsta,
-		BrojRacuna:     input.BrojRacuna,
-		BrojKredita:    generateLoanNumber(),
-		Iznos:          input.Iznos,
-		Period:         input.Period,
-		KamatnaStopa:   kamatnaStopa,
-		TipKamate:      input.TipKamate,
-		DatumKreiranja: time.Now(),
-		DatumDospeca:   time.Now().AddDate(0, input.Period, 0),
-		IznosRate:      iznosRate,
-		Status:         "zahtev",
-		ClientID:       input.ClientID,
-		CurrencyID:     input.CurrencyID,
+		Vrsta:             input.Vrsta,
+		BrojRacuna:        input.BrojRacuna,
+		BrojKredita:       generateLoanNumber(),
+		Iznos:             input.Iznos,
+		Period:            input.Period,
+		KamatnaStopa:      kamatnaStopa,
+		TipKamate:         input.TipKamate,
+		DatumKreiranja:    time.Now(),
+		DatumDospeca:      time.Now().AddDate(0, input.Period, 0),
+		IznosRate:         iznosRate,
+		Status:            "zahtev",
+		ClientID:          input.ClientID,
+		CurrencyID:        input.CurrencyID,
+		SvrhaKredita:      input.SvrhaKredita,
+		IznosMesecnePlate: input.IznosMesecnePlate,
+		StatusZaposlenja:  input.StatusZaposlenja,
+		PeriodZaposlenja:  input.PeriodZaposlenja,
+		KontaktTelefon:    input.KontaktTelefon,
 	}
 
 	if err := s.loanRepo.Create(loan); err != nil {

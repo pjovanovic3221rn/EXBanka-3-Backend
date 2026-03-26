@@ -48,19 +48,45 @@ func AccountTypeCode(tip, vrsta, podvrsta string) string {
 	}
 }
 
-// GenerateAccountNumber generates an 18-digit account number.
-// Format: BBB (3) + FFFF (4) + RRRRRRRRR (9) + TT (2) = 18
+// GenerateAccountNumber generates an 18-digit account number with checksum.
+// Format: BBB (3) + FFFF (4) + RRRRRRRR (8 random) + C (1 check) + TT (2) = 18
+// The check digit C is chosen so that (sum of all 18 digits) % 11 == 0.
 func GenerateAccountNumber(tip, vrsta string, podvrsta ...string) string {
 	pv := ""
 	if len(podvrsta) > 0 {
 		pv = podvrsta[0]
 	}
-	randomPart := fmt.Sprintf("%09d", rand.Int63n(1_000_000_000))
 	typeCode := AccountTypeCode(tip, vrsta, pv)
-	return BankCode + BranchCode + randomPart + typeCode
+	randomPart := fmt.Sprintf("%08d", rand.Int63n(100_000_000)) // 8 random digits
+
+	// 17 digits without check digit: BBB + FFFF + RRRRRRRR + TT
+	prefix := BankCode + BranchCode + randomPart // 15 digits
+	suffix := typeCode                           // 2 digits
+
+	// Sum of all known 17 digits
+	sum := digitSum(prefix) + digitSum(suffix)
+	check := (11 - (sum % 11)) % 11
+	// If check == 10, regenerate (rare edge case)
+	if check == 10 {
+		return GenerateAccountNumber(tip, vrsta, podvrsta...)
+	}
+
+	return prefix + fmt.Sprintf("%d", check) + suffix
 }
 
-// ValidateAccountNumber checks that number is 18 digits and starts with a valid bank code.
+// digitSum returns the sum of all digits in a numeric string.
+func digitSum(number string) int {
+	sum := 0
+	for _, c := range number {
+		if c >= '0' && c <= '9' {
+			sum += int(c - '0')
+		}
+	}
+	return sum
+}
+
+// ValidateAccountNumber checks that a number is 18 digits, starts with a valid
+// bank code, and passes the (sum of digits) % 11 == 0 checksum.
 func ValidateAccountNumber(number string) bool {
 	if len(number) != 18 {
 		return false
@@ -71,5 +97,9 @@ func ValidateAccountNumber(number string) bool {
 		}
 	}
 	bankCode := number[:3]
-	return bankCode == "111" || bankCode == "222" || bankCode == "333" || bankCode == "444"
+	validBank := bankCode == "111" || bankCode == "222" || bankCode == "333" || bankCode == "444"
+	if !validBank {
+		return false
+	}
+	return digitSum(number)%11 == 0
 }

@@ -99,7 +99,7 @@ func main() {
 
 	cardRepo := repository.NewCardRepository(db)
 	notifSvc := service.NewNotificationService(cfg)
-	cardSvc := service.NewCardService(cardRepo, accountRepo, notifSvc)
+	cardSvc := service.NewCardServiceWithDB(cardRepo, accountRepo, notifSvc, db)
 	cardH := handler.NewCardHTTPHandlerWithConfig(cardSvc, cfg)
 
 	httpMux := http.NewServeMux()

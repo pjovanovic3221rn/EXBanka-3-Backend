@@ -19,8 +19,13 @@ type cardServiceInterface interface {
 	ListByAccount(accountID uint) ([]models.Card, error)
 	ListByClient(clientID uint) ([]models.Card, error)
 	BlockCard(cardID, clientID uint) (*models.Card, error)
+	BlockCardWithNotify(cardID, clientID uint, notify *service.CardStatusNotifyInfo) (*models.Card, error)
 	UnblockCard(cardID uint) (*models.Card, error)
+	UnblockCardWithNotify(cardID uint, notify *service.CardStatusNotifyInfo) (*models.Card, error)
 	DeactivateCard(cardID uint) (*models.Card, error)
+	DeactivateCardWithNotify(cardID uint, notify *service.CardStatusNotifyInfo) (*models.Card, error)
+	RequestCardClient(input service.ClientCardRequestInput) (*models.CardRequest, error)
+	VerifyCardRequest(requestID uint, code string) (*models.Card, error)
 }
 
 // CardHTTPHandler handles all /api/v1/cards/* routes.
@@ -66,6 +71,14 @@ func (h *CardHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(rest, "/"), "/")
 
 	switch {
+	// POST /api/v1/cards/request
+	case len(parts) == 1 && parts[0] == "request" && r.Method == http.MethodPost:
+		h.handleClientRequest(w, r)
+
+	// POST /api/v1/cards/request/{id}/verify
+	case len(parts) == 3 && parts[0] == "request" && parts[2] == "verify" && r.Method == http.MethodPost:
+		h.handleClientVerify(w, r, parts[1])
+
 	// GET /api/v1/cards/account/{id}
 	case len(parts) == 2 && parts[0] == "account" && r.Method == http.MethodGet:
 		h.handleListByAccount(w, r, parts[1])
@@ -251,7 +264,11 @@ func (h *CardHTTPHandler) handleBlock(w http.ResponseWriter, r *http.Request, ra
 	}
 
 	var req struct {
-		ClientID uint `json:"clientId"`
+		ClientID           uint   `json:"clientId"`
+		ClientEmail        string `json:"clientEmail"`
+		ClientName         string `json:"clientName"`
+		OvlascenoLiceEmail string `json:"ovlascenoLiceEmail"`
+		OvlascenoLiceName  string `json:"ovlascenoLiceName"`
 	}
 	if r.Body != nil {
 		json.NewDecoder(r.Body).Decode(&req)
@@ -270,7 +287,13 @@ func (h *CardHTTPHandler) handleBlock(w http.ResponseWriter, r *http.Request, ra
 		return
 	}
 
-	card, err := h.svc.BlockCard(cardID, req.ClientID)
+	notify := &service.CardStatusNotifyInfo{
+		ClientEmail:        req.ClientEmail,
+		ClientName:         req.ClientName,
+		OvlascenoLiceEmail: req.OvlascenoLiceEmail,
+		OvlascenoLiceName:  req.OvlascenoLiceName,
+	}
+	card, err := h.svc.BlockCardWithNotify(cardID, req.ClientID, notify)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -295,7 +318,23 @@ func (h *CardHTTPHandler) handleUnblock(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	card, err := h.svc.UnblockCard(cardID)
+	var req struct {
+		ClientEmail        string `json:"clientEmail"`
+		ClientName         string `json:"clientName"`
+		OvlascenoLiceEmail string `json:"ovlascenoLiceEmail"`
+		OvlascenoLiceName  string `json:"ovlascenoLiceName"`
+	}
+	if r.Body != nil {
+		json.NewDecoder(r.Body).Decode(&req)
+	}
+
+	notify := &service.CardStatusNotifyInfo{
+		ClientEmail:        req.ClientEmail,
+		ClientName:         req.ClientName,
+		OvlascenoLiceEmail: req.OvlascenoLiceEmail,
+		OvlascenoLiceName:  req.OvlascenoLiceName,
+	}
+	card, err := h.svc.UnblockCardWithNotify(cardID, notify)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -320,11 +359,118 @@ func (h *CardHTTPHandler) handleDeactivate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	card, err := h.svc.DeactivateCard(cardID)
+	var req struct {
+		ClientEmail        string `json:"clientEmail"`
+		ClientName         string `json:"clientName"`
+		OvlascenoLiceEmail string `json:"ovlascenoLiceEmail"`
+		OvlascenoLiceName  string `json:"ovlascenoLiceName"`
+	}
+	if r.Body != nil {
+		json.NewDecoder(r.Body).Decode(&req)
+	}
+
+	notify := &service.CardStatusNotifyInfo{
+		ClientEmail:        req.ClientEmail,
+		ClientName:         req.ClientName,
+		OvlascenoLiceEmail: req.OvlascenoLiceEmail,
+		OvlascenoLiceName:  req.OvlascenoLiceName,
+	}
+	card, err := h.svc.DeactivateCardWithNotify(cardID, notify)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	writeJSON(w, http.StatusOK, card)
+}
+
+// POST /api/v1/cards/request — client requests a new card (sends verification code)
+func (h *CardHTTPHandler) handleClientRequest(w http.ResponseWriter, r *http.Request) {
+	claims, ok := parseHTTPClaims(w, r, h.cfg)
+	if !ok {
+		return
+	}
+	if claims == nil || (claims.ClientID == 0 && claims.TokenSource != "client") {
+		if !requireEmployeePermissionHTTP(w, claims, models.PermEmployeeBasic) {
+			return
+		}
+	}
+
+	var req struct {
+		AccountID             uint   `json:"accountId"`
+		VrstaKartice          string `json:"vrstaKartice"`
+		NazivKartice          string `json:"nazivKartice"`
+		ClientEmail           string `json:"clientEmail"`
+		ClientName            string `json:"clientName"`
+		OvlascenoIme          string `json:"ovlascenoIme"`
+		OvlascenoPrezime      string `json:"ovlascenoPrezime"`
+		OvlascenoEmail        string `json:"ovlascenoEmail"`
+		OvlascenoBrojTelefona string `json:"ovlascenoBrojTelefona"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	clientID := claims.ClientID
+	cardReq, err := h.svc.RequestCardClient(service.ClientCardRequestInput{
+		AccountID:             req.AccountID,
+		ClientID:              clientID,
+		VrstaKartice:          req.VrstaKartice,
+		NazivKartice:          req.NazivKartice,
+		ClientEmail:           req.ClientEmail,
+		ClientName:            req.ClientName,
+		OvlascenoIme:          req.OvlascenoIme,
+		OvlascenoPrezime:      req.OvlascenoPrezime,
+		OvlascenoEmail:        req.OvlascenoEmail,
+		OvlascenoBrojTelefona: req.OvlascenoBrojTelefona,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"id":         cardReq.ID,
+		"expires_at": cardReq.ExpiresAt,
+		"message":    "Verification code sent to your email",
+	})
+}
+
+// POST /api/v1/cards/request/{id}/verify — client verifies the code
+func (h *CardHTTPHandler) handleClientVerify(w http.ResponseWriter, r *http.Request, rawID string) {
+	claims, ok := parseHTTPClaims(w, r, h.cfg)
+	if !ok {
+		return
+	}
+	if claims == nil || (claims.ClientID == 0 && claims.TokenSource != "client") {
+		if !requireEmployeePermissionHTTP(w, claims, models.PermEmployeeBasic) {
+			return
+		}
+	}
+
+	reqID, err := parseID(rawID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request id")
+		return
+	}
+
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	card, err := h.svc.VerifyCardRequest(reqID, body.Code)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"card":    card,
+		"message": "Card created successfully",
+	})
 }

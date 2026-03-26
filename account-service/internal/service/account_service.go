@@ -142,7 +142,7 @@ func (s *AccountService) CreateAccount(input CreateAccountInput) (*models.Accoun
 		odrzavanje = 255.00
 	}
 	account := &models.Account{
-		BrojRacuna:        util.GenerateAccountNumber(input.Tip, input.Vrsta),
+		BrojRacuna:        util.GenerateAccountNumber(input.Tip, input.Vrsta, input.Podvrsta),
 		ClientID:          input.ClientID,
 		FirmaID:           input.FirmaID,
 		ZaposleniID:       input.ZaposleniID,

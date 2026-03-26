@@ -18,6 +18,22 @@ func ValidInterestTypes() []string {
 	return []string{"fiksna", "varijabilna"}
 }
 
+// ValidPeriods returns the allowed repayment periods (months) for each loan type.
+func ValidPeriods() map[string][]int {
+	return map[string][]int{
+		"gotovinski":      {12, 24, 36, 48, 60, 72, 84},
+		"auto":            {12, 24, 36, 48, 60, 72, 84},
+		"studentski":      {12, 24, 36, 48, 60, 72, 84},
+		"refinansirajuci": {12, 24, 36, 48, 60, 72, 84},
+		"stambeni":        {60, 120, 180, 240, 300, 360},
+	}
+}
+
+// ValidEmploymentStatuses returns the allowed values for StatusZaposlenja.
+func ValidEmploymentStatuses() []string {
+	return []string{"stalno", "privremeno", "nezaposlen"}
+}
+
 // Loan represents a bank loan issued to a client.
 type Loan struct {
 	ID             uint      `gorm:"primaryKey;autoIncrement" json:"id"`
@@ -35,6 +51,14 @@ type Loan struct {
 	ClientID       uint      `gorm:"not null" json:"client_id"`
 	ZaposleniID    *uint     `json:"zaposleni_id"`                                // who approved/rejected
 	CurrencyID     uint      `gorm:"not null" json:"currency_id"`
+
+	// Additional fields from specification
+	SvrhaKredita      string `json:"svrha_kredita"`                               // purpose of loan
+	IznosMesecnePlate float64 `json:"iznos_mesecne_plate"`                        // monthly salary
+	StatusZaposlenja  string `json:"status_zaposlenja"`                            // stalno | privremeno | nezaposlen
+	PeriodZaposlenja  string `json:"period_zaposlenja"`                            // employment duration at current employer
+	KontaktTelefon    string `json:"kontakt_telefon"`                              // contact phone
+
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 

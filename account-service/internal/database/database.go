@@ -38,6 +38,7 @@ func Migrate(db *gorm.DB) error {
 		&models.Account{},
 		&models.Card{},
 		&models.OvlascenoLice{},
+		&models.CardRequest{},
 	); err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}

@@ -63,6 +63,12 @@ func (c *InstallmentCollector) Run(asOf time.Time) error {
 	return nil
 }
 
+// retryHours defines how many hours the system retries before applying late penalties.
+const retryHours = 72
+
+// latePenaltyRate is the interest rate increase (%) applied after retry period expires.
+const latePenaltyRate = 0.05
+
 func (c *InstallmentCollector) collectOne(inst *models.LoanInstallment) error {
 	if c.db != nil {
 		return c.db.Transaction(func(tx *gorm.DB) error {
@@ -80,15 +86,25 @@ func (c *InstallmentCollector) collectOne(inst *models.LoanInstallment) error {
 				Joins("LEFT JOIN currencies ON currencies.id = accounts.currency_id").
 				Where("accounts.broj_racuna = ?", loan.BrojRacuna).
 				First(&account).Error; err != nil {
-				currentInst.Status = "kasni"
-				currentInst.DatumPlacanja = nil
-				return tx.Save(&currentInst).Error
+				c.markLate(tx, &currentInst)
+				*inst = currentInst
+				return nil
 			}
 
 			if account.Status != "aktivan" || account.RaspolozivoStanje < currentInst.Iznos {
-				currentInst.Status = "kasni"
-				currentInst.DatumPlacanja = nil
-				return tx.Save(&currentInst).Error
+				c.markLate(tx, &currentInst)
+				// Check if 72h retry period has expired — apply penalty
+				if currentInst.DatumKasnjenja != nil {
+					hoursSinceLate := time.Since(*currentInst.DatumKasnjenja).Hours()
+					if hoursSinceLate >= retryHours {
+						loan.KamatnaStopa += latePenaltyRate
+						loan.IznosRate = annuity(loan.Iznos, loan.KamatnaStopa, loan.Period)
+						tx.Save(&loan)
+						slog.Warn("Late penalty applied", "loan_id", loan.ID, "new_rate", loan.KamatnaStopa)
+					}
+				}
+				*inst = currentInst
+				return nil
 			}
 
 			now := time.Now().UTC()
@@ -103,6 +119,7 @@ func (c *InstallmentCollector) collectOne(inst *models.LoanInstallment) error {
 
 			currentInst.Status = "placena"
 			currentInst.DatumPlacanja = &now
+			currentInst.DatumKasnjenja = nil
 			if err := tx.Save(&currentInst).Error; err != nil {
 				return err
 			}
@@ -131,14 +148,19 @@ func (c *InstallmentCollector) collectOne(inst *models.LoanInstallment) error {
 	}
 	account, err := c.accountRepo.FindByBrojRacuna(loan.BrojRacuna)
 	if err != nil {
-		inst.Status = "kasni"
-		inst.DatumPlacanja = nil
+		c.markLateFallback(inst)
 		return c.repo.Save(inst)
 	}
 
 	if account.Status != "aktivan" || account.RaspolozivoStanje < inst.Iznos {
-		inst.Status = "kasni"
-		inst.DatumPlacanja = nil
+		c.markLateFallback(inst)
+		// Check 72h penalty
+		if inst.DatumKasnjenja != nil && time.Since(*inst.DatumKasnjenja).Hours() >= retryHours {
+			loan.KamatnaStopa += latePenaltyRate
+			loan.IznosRate = annuity(loan.Iznos, loan.KamatnaStopa, loan.Period)
+			_ = c.loanRepo.SaveLoan(loan)
+			slog.Warn("Late penalty applied", "loan_id", loan.ID, "new_rate", loan.KamatnaStopa)
+		}
 		return c.repo.Save(inst)
 	}
 
@@ -154,6 +176,7 @@ func (c *InstallmentCollector) collectOne(inst *models.LoanInstallment) error {
 	now := time.Now().UTC()
 	inst.Status = "placena"
 	inst.DatumPlacanja = &now
+	inst.DatumKasnjenja = nil
 	if err := c.repo.Save(inst); err != nil {
 		return err
 	}
@@ -177,6 +200,27 @@ func (c *InstallmentCollector) collectOne(inst *models.LoanInstallment) error {
 		return c.loanRepo.SaveLoan(loan)
 	}
 	return nil
+}
+
+// markLate sets installment to "kasni" and records when it first became late (for 72h retry).
+func (c *InstallmentCollector) markLate(tx *gorm.DB, inst *models.LoanInstallment) {
+	inst.Status = "kasni"
+	inst.DatumPlacanja = nil
+	if inst.DatumKasnjenja == nil {
+		now := time.Now().UTC()
+		inst.DatumKasnjenja = &now
+	}
+	tx.Save(inst)
+}
+
+// markLateFallback is the non-transaction version of markLate.
+func (c *InstallmentCollector) markLateFallback(inst *models.LoanInstallment) {
+	inst.Status = "kasni"
+	inst.DatumPlacanja = nil
+	if inst.DatumKasnjenja == nil {
+		now := time.Now().UTC()
+		inst.DatumKasnjenja = &now
+	}
 }
 
 // loanRepo is the subset of LoanRepository used by InterestRateUpdater.

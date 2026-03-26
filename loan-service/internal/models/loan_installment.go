@@ -17,6 +17,7 @@ type LoanInstallment struct {
 	KamataStopaSnapshot float64    `gorm:"not null" json:"kamata_stopa_snapshot"`   // rate at the time of payment
 	DatumDospeca        time.Time  `gorm:"not null" json:"datum_dospeca"`
 	DatumPlacanja       *time.Time `json:"datum_placanja"`                          // nil until paid
+	DatumKasnjenja      *time.Time `json:"datum_kasnjenja"`                         // when installment first became late
 	Status              string     `gorm:"not null;default:'ocekuje'" json:"status"` // ocekuje | placena | kasni
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
